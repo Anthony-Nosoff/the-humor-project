@@ -23,4 +23,43 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  margin: 2rem;
+}
+
+table {
+  margin: 1rem;
+  /* border-collapse: collapse; */
+  width: calc(100%-2rem);
+  border: 1px solid var(--background);
+  border-collapse: separate;
+  border-spacing: 0.1rem 0.5rem;
+}
+
+tr {
+  margin: 10px;
+  padding: 10px;
+  border: 3px solid transparent;
+  background: rgba(0, 0, 255, 0.3);
+  transition: background 0.3s ease;
+}
+
+tr:hover {
+  background: rgba(0, 0, 255, 0.5);
+}
+
+th {
+  background: rgba(255, 0, 0, 0.3);
+}
+
+td, th {
+  /* border: 10px solid var(--background); */
+  padding: 0.5rem;
+  text-align: center;
+}
+
+img {
+  max-width: 30%;
+  height: stretch;
+  display: block;
+  margin: 0 auto;
 }
