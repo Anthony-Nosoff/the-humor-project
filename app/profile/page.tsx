@@ -54,7 +54,7 @@ export default function Page() {
     loadSessionAndProfile();
   }, []);
 
-  const handleUpdateName = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleUpdateName = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!session?.user) return;
 
@@ -78,7 +78,8 @@ export default function Page() {
 
     const { error } = await supabase
       .from("profiles")
-      .upsert(payload, { onConflict: "id" });
+      .update(payload)
+      .eq("id", session.user.id);
 
     if (error) {
       setUpdateError(error.message || "Failed to update profile.");
@@ -134,7 +135,7 @@ export default function Page() {
                   onChange={(e) => setFirstName(e.target.value)}
                   placeholder="First name"
                   disabled={isUpdating}
-                  className="mt-1 w-full rounded border border-gray-300 p-2 text-sm"
+                  className="mt-1 w-full rounded border border-gray-300 p-2 text-sm text-black"
                 />
               </div>
               <div>
@@ -146,7 +147,7 @@ export default function Page() {
                   onChange={(e) => setLastName(e.target.value)}
                   placeholder="Last name"
                   disabled={isUpdating}
-                  className="mt-1 w-full rounded border border-gray-300 p-2 text-sm"
+                  className="mt-1 w-full rounded border border-gray-300 p-2 text-sm text-black"
                 />
               </div>
               <button
