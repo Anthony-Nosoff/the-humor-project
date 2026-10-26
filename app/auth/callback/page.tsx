@@ -118,6 +118,7 @@ export default function AuthCallbackPage() {
           .select("id, first_name, last_name")
           .eq("id", user.id)
           .maybeSingle();
+        console.log("Fetched profile:", profile, "Error:", profileError);
 
         if (profileError && profileError.code !== "PGRST116") {
           console.warn("Error fetching profile from public.profiles:", profileError);
@@ -149,7 +150,12 @@ export default function AuthCallbackPage() {
 
           setFirstName(initialFirst);
           setLastName(initialLast);
-          setStatus("prompt_name");
+          if (initialFirst && initialLast) {
+            // If both names are already present, redirect to profile
+            router.replace("/profile");
+          } else {
+            setStatus("prompt_name");
+          }
         }
       } catch (err: unknown) {
         if (isMounted) {
@@ -208,7 +214,8 @@ export default function AuthCallbackPage() {
       // Upsert into public.profiles
       let { error: saveError } = await supabase
         .from("profiles")
-        .upsert(payload, { onConflict: "id" });
+        .update(payload)
+        .eq("id", currentUser.id);
 
       if (saveError) {
         // Fallback to update or insert if upsert encounters RLS conflict
