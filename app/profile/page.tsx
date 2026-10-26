@@ -175,6 +175,16 @@ export default function Page() {
             </div>
           </div>
         )}
+        
+        {/* navigation buttons for images */}
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link href="/upload" className="rounded bg-green-600 px-4 py-2 font-medium text-white hover:bg-green-700">
+            Go to Upload Page
+          </Link>
+          <Link href="/my-images" className="rounded bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700">
+            View My Images
+          </Link>
+        </div>
 
         <div className="mt-6">
           <button

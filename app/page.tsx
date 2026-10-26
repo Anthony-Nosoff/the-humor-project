@@ -1,5 +1,6 @@
 import { supabase } from '@/app/supabase/supabaseClient'
 import LogInButton from '@/app/components/login'
+import Link from 'next/link'
 
 export default async function Page() {
 
@@ -9,32 +10,18 @@ export default async function Page() {
 
 
   return (
-    <>
-      <h2 className="text-xl font-semibold">The Humor Project Assignment 3: Auth</h2>
-      <LogInButton></LogInButton>
-      <h1 className="text-2xl font-bold">SpongeBob Character Data</h1>
-      <table className="table-auto border-collapse border border-gray-300 gap-4 padding-4">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Type of Creature</th>
-            <th>Image</th>
-          </tr>
-        </thead>
-        <tbody>
-          {spongebobCharacters?.map((character) => (
-            <tr key={character.id}>
-              <td>{character.id}</td>
-              <td>{character.name}</td>
-              <td>{character.type}</td>
-              <td>
-                <img src={character.image} alt={character.name} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </>
+    <div className="py-8 max-w-4xl mx-auto px-4">
+      <h2 className="text-xl font-semibold mb-4">The Humor Project Assignment 4: Caption Rating App</h2>
+      <div className="flex items-center gap-4 mb-6">
+        <LogInButton></LogInButton>
+        <Link
+          href="/memes"
+          className="inline-flex items-center gap-1.5 rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-purple-700 transition"
+        >
+          <span>🎭</span>
+          <span>View & Rate Memes</span>
+        </Link>
+      </div>
+    </div>
   )
 }
