@@ -35,7 +35,13 @@ The admin panel implements 100% of the administrative criteria:
 
 The admin dashboard organizes these tools across focused views:
 
-1. **📊 Overview**: High-level platform KPIs, summary counts, and system status.
+1. **📊 Overview**: High-level platform KPIs, visual graphs, and live analytics:
+   - **📈 Content Creation Velocity (7-Day Dual Bar Chart)**: Daily comparison of image uploads vs AI meme generations over the last 7 calendar days.
+   - **👁️ Multimodal Vision AI Coverage (SVG Donut Chart)**: Percentage and volume of images enriched with Gemini Flash visual descriptions vs unanalyzed pending images.
+   - **🎯 Platform Conversion Funnel**: 3-stage lifecycle visualization (Uploaded Images ➔ Converted to AI Memes ➔ Liked & Engaged by Community).
+   - **⚖️ Prompt Chain Routing Mix Distribution**: Proportional traffic bar illustrating active weighting allocation across generative chains.
+   - **🏆 Top Memes Community Leaderboard**: Horizontal engagement bar chart ranking the top 5 highest-rated community memes with like counts and previews.
+   - **⚙️ System Infrastructure & Security Matrix**: Real-time operational status of LLM providers, models, allowed signup domains, and VIP whitelisted emails.
 2. **👥 Users**: Read all profiles and manage user permissions.
 3. **🖼️ Images CRUD**: Full image lifecycle management:
    - **Upload Image Modal**: Upload local files to the `images` bucket, record in `public.images`, and trigger Gemini summarization.

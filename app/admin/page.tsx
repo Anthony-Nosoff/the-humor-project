@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/app/supabase/supabaseClient';
 import type { Session } from '@supabase/supabase-js';
@@ -931,6 +931,145 @@ export default function AdminPage() {
     }
   };
 
+  // ==========================================
+  // COMPUTED OVERVIEW STATISTICS & ANALYTICS
+  // ==========================================
+  const overviewStats = useMemo(() => {
+    // Basic Counts
+    const superAdminsCount = profiles.filter((p) => p.is_super_admin).length;
+    const totalLikes = ratings.filter((r) => r.liked).length;
+    const totalDislikes = ratings.filter((r) => !r.liked).length;
+    const positiveRatingRatio =
+      ratings.length > 0 ? Math.round((totalLikes / ratings.length) * 100) : 100;
+
+    // Multimodal AI Summarization Coverage
+    const summarizedImagesCount = images.filter(
+      (img) => Boolean(img.description && img.description.trim())
+    ).length;
+    const unsummarizedImagesCount = images.length - summarizedImagesCount;
+    const summarizationPercentage =
+      images.length > 0
+        ? Math.round((summarizedImagesCount / images.length) * 100)
+        : 0;
+
+    // Platform Funnel & Conversion Rates
+    const imagesWithMemesCount = images.filter((img) => img.memesCount > 0).length;
+    const imageToMemeConversion =
+      images.length > 0
+        ? Math.round((imagesWithMemesCount / images.length) * 100)
+        : 0;
+    const memesWithLikesCount = memes.filter((m) => m.likesCount > 0).length;
+    const memeEngagementRate =
+      memes.length > 0
+        ? Math.round((memesWithLikesCount / memes.length) * 100)
+        : 0;
+
+    // 7-Day Velocity Data
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+      const label = d.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
+      return { dateStr, label };
+    });
+
+    const activityByDay = last7Days.map(({ dateStr, label }) => {
+      const memesCount = memes.filter(
+        (m) => m.created_at && m.created_at.startsWith(dateStr)
+      ).length;
+      const imagesCount = images.filter(
+        (img) => img.created_at && img.created_at.startsWith(dateStr)
+      ).length;
+      return {
+        dateStr,
+        label,
+        memesCount,
+        imagesCount,
+        total: memesCount + imagesCount,
+      };
+    });
+
+    const maxDayCount = Math.max(
+      1,
+      ...activityByDay.map((d) => Math.max(d.memesCount, d.imagesCount))
+    );
+    const total7DayActivity = activityByDay.reduce((acc, d) => acc + d.total, 0);
+
+    // Prompt Chain Mix Proportions
+    const activeMix = chainMix.filter((m) => m.is_active !== false);
+    const totalMixWeight = activeMix.reduce(
+      (sum, m) => sum + (Number(m.weight) || 0),
+      0
+    );
+    const mixWithChains = activeMix.map((mix, idx) => {
+      const chain = promptChains.find((c) => c.id === mix.chain_id);
+      const weightNum = Number(mix.weight) || 0;
+      const percentage =
+        totalMixWeight > 0
+          ? Math.round((weightNum / totalMixWeight) * 100)
+          : 0;
+      return {
+        ...mix,
+        name: chain?.name || `Chain #${idx + 1}`,
+        percentage,
+      };
+    });
+
+    // Top 5 Memes Leaderboard
+    const topMemes = [...memes]
+      .sort((a, b) => (b.likesCount || 0) - (a.likesCount || 0))
+      .slice(0, 5);
+    const maxLikesInTop = Math.max(
+      1,
+      ...(topMemes.map((m) => m.likesCount || 0))
+    );
+
+    // Infrastructure & Policy Status
+    const activeProviders = providers.filter((p) => p.is_active !== false).length;
+    const activeModels = models.filter((m) => m.is_active !== false).length;
+    const activeDomains = allowedDomains.filter((d) => d.is_active !== false).length;
+
+    return {
+      superAdminsCount,
+      totalLikes,
+      totalDislikes,
+      positiveRatingRatio,
+      summarizedImagesCount,
+      unsummarizedImagesCount,
+      summarizationPercentage,
+      imagesWithMemesCount,
+      imageToMemeConversion,
+      memesWithLikesCount,
+      memeEngagementRate,
+      activityByDay,
+      maxDayCount,
+      total7DayActivity,
+      mixWithChains,
+      totalMixWeight,
+      topMemes,
+      maxLikesInTop,
+      activeProviders,
+      activeModels,
+      activeDomains,
+    };
+  }, [
+    profiles,
+    images,
+    memes,
+    ratings,
+    chainMix,
+    promptChains,
+    providers,
+    models,
+    allowedDomains,
+  ]);
+
   if (loading) {
     return (
       <div className="max-w-6xl mx-auto py-16 px-4 text-center">
@@ -1053,41 +1192,572 @@ export default function AdminPage() {
       {/* ========================================================= */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
-              <span className="text-xs text-gray-500 font-medium">Profiles</span>
-              <p className="text-xl font-bold text-gray-900 mt-1">{profiles.length}</p>
+          {/* Top KPI Metrics Strip */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <button
+              type="button"
+              onClick={() => setActiveTab('users')}
+              className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs text-left transition hover:border-purple-300 hover:shadow-xs group cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500 font-medium">Profiles</span>
+                <span className="text-gray-400 group-hover:text-purple-600 transition text-xs">👥</span>
+              </div>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{profiles.length}</p>
+              <span className="inline-block mt-1 text-[10px] font-semibold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded">
+                {overviewStats.superAdminsCount} Super {overviewStats.superAdminsCount === 1 ? 'Admin' : 'Admins'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('images')}
+              className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs text-left transition hover:border-sky-300 hover:shadow-xs group cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500 font-medium">Images</span>
+                <span className="text-gray-400 group-hover:text-sky-600 transition text-xs">🖼️</span>
+              </div>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{images.length}</p>
+              <span className="inline-block mt-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                {overviewStats.summarizationPercentage}% AI Analyzed
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('media')}
+              className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs text-left transition hover:border-purple-300 hover:shadow-xs group cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500 font-medium">AI Memes</span>
+                <span className="text-gray-400 group-hover:text-purple-600 transition text-xs">🎭</span>
+              </div>
+              <p className="text-2xl font-bold text-purple-600 mt-1">{memes.length}</p>
+              <span className="inline-block mt-1 text-[10px] font-semibold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded">
+                {overviewStats.imageToMemeConversion}% Img Conversion
+              </span>
+            </button>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs text-left">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500 font-medium">Community Likes</span>
+                <span className="text-rose-500 text-xs">❤️</span>
+              </div>
+              <p className="text-2xl font-bold text-rose-600 mt-1">{overviewStats.totalLikes}</p>
+              <span className="inline-block mt-1 text-[10px] font-semibold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded">
+                {overviewStats.positiveRatingRatio}% Positive Ratio
+              </span>
             </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
-              <span className="text-xs text-gray-500 font-medium">Uploaded Images</span>
-              <p className="text-xl font-bold text-gray-900 mt-1">{images.length}</p>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('prompt_chains')}
+              className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs text-left transition hover:border-indigo-300 hover:shadow-xs group cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500 font-medium">Chains & Mix</span>
+                <span className="text-gray-400 group-hover:text-indigo-600 transition text-xs">⛓️</span>
+              </div>
+              <p className="text-2xl font-bold text-indigo-600 mt-1">{promptChains.length}</p>
+              <span className="inline-block mt-1 text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+                {overviewStats.mixWithChains.length} Active in Routing
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('terms')}
+              className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs text-left transition hover:border-amber-300 hover:shadow-xs group cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500 font-medium">Terms Glossary</span>
+                <span className="text-gray-400 group-hover:text-amber-600 transition text-xs">📖</span>
+              </div>
+              <p className="text-2xl font-bold text-amber-600 mt-1">{terms.length}</p>
+              <span className="inline-block mt-1 text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+                Active Definitions
+              </span>
+            </button>
+          </div>
+
+          {/* Row 1: Creation Velocity Bar Chart & Multimodal Vision Donut */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* 7-Day Velocity Chart */}
+            <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-5 shadow-2xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-gray-100 pb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                    <span>📈</span>
+                    <span>Content Creation Velocity (Last 7 Days)</span>
+                  </h3>
+                  <p className="text-xs text-gray-500">Daily images uploaded vs AI memes generated across the platform</p>
+                </div>
+                <div className="flex items-center gap-4 text-xs font-medium">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-xs bg-sky-500"></span>
+                    <span className="text-gray-600">Images</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-xs bg-purple-600"></span>
+                    <span className="text-gray-600">Memes</span>
+                  </div>
+                  <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-bold text-gray-700">
+                    {overviewStats.total7DayActivity} total
+                  </span>
+                </div>
+              </div>
+
+              {/* Bars Container */}
+              <div className="pt-2">
+                <div className="h-44 flex items-end justify-between gap-2 border-b border-gray-200 pb-2 px-1 sm:px-4">
+                  {overviewStats.activityByDay.map((day) => {
+                    const imgHeight =
+                      day.imagesCount > 0
+                        ? Math.max(12, Math.round((day.imagesCount / overviewStats.maxDayCount) * 100))
+                        : 0;
+                    const memeHeight =
+                      day.memesCount > 0
+                        ? Math.max(12, Math.round((day.memesCount / overviewStats.maxDayCount) * 100))
+                        : 0;
+
+                    return (
+                      <div key={day.dateStr} className="flex-1 flex flex-col items-center h-full justify-end group">
+                        {/* Pair of bars */}
+                        <div className="w-full flex items-end justify-center gap-1 sm:gap-2 h-36">
+                          {/* Image bar */}
+                          <div className="w-1/2 max-w-[22px] flex flex-col items-center justify-end h-full">
+                            {day.imagesCount > 0 && (
+                              <span className="text-[10px] font-bold text-sky-700 mb-1 opacity-80 group-hover:opacity-100">
+                                {day.imagesCount}
+                              </span>
+                            )}
+                            <div
+                              style={{ height: `${imgHeight}%` }}
+                              className={`w-full rounded-t-sm transition-all duration-300 ${
+                                day.imagesCount > 0 ? 'bg-sky-500 hover:bg-sky-600' : 'bg-transparent'
+                              }`}
+                              title={`${day.label}: ${day.imagesCount} images`}
+                            />
+                          </div>
+
+                          {/* Meme bar */}
+                          <div className="w-1/2 max-w-[22px] flex flex-col items-center justify-end h-full">
+                            {day.memesCount > 0 && (
+                              <span className="text-[10px] font-bold text-purple-700 mb-1 opacity-80 group-hover:opacity-100">
+                                {day.memesCount}
+                              </span>
+                            )}
+                            <div
+                              style={{ height: `${memeHeight}%` }}
+                              className={`w-full rounded-t-sm transition-all duration-300 ${
+                                day.memesCount > 0 ? 'bg-purple-600 hover:bg-purple-700' : 'bg-transparent'
+                              }`}
+                              title={`${day.label}: ${day.memesCount} memes`}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Date label */}
+                        <span className="text-[11px] font-medium text-gray-500 mt-2 text-center truncate w-full">
+                          {day.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-gray-400 pt-2">
+                  <span>Baseline: 0 generations</span>
+                  <span>Peak Activity: {overviewStats.maxDayCount} items/day</span>
+                </div>
+              </div>
             </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
-              <span className="text-xs text-gray-500 font-medium">AI Memes</span>
-              <p className="text-xl font-bold text-purple-600 mt-1">{memes.length}</p>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
-              <span className="text-xs text-gray-500 font-medium">Total Likes</span>
-              <p className="text-xl font-bold text-rose-600 mt-1">{ratings.filter((r) => r.liked).length}</p>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
-              <span className="text-xs text-gray-500 font-medium">Prompt Chains</span>
-              <p className="text-xl font-bold text-indigo-600 mt-1">{promptChains.length}</p>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
-              <span className="text-xs text-gray-500 font-medium">Terms</span>
-              <p className="text-xl font-bold text-amber-600 mt-1">{terms.length}</p>
+
+            {/* Multimodal Vision AI Donut Chart */}
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-2xs space-y-4 flex flex-col justify-between">
+              <div className="border-b border-gray-100 pb-3">
+                <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <span>👁️</span>
+                  <span>Vision AI Analysis Coverage</span>
+                </h3>
+                <p className="text-xs text-gray-500">Multimodal descriptions generated via Gemini Flash</p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row lg:flex-col items-center justify-center gap-6 py-2">
+                {/* SVG Gauge */}
+                <div className="relative w-36 h-36 flex-shrink-0 flex items-center justify-center">
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                    {/* Background Track */}
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="38"
+                      className="text-gray-100"
+                      strokeWidth="10"
+                      stroke="currentColor"
+                      fill="transparent"
+                    />
+                    {/* Emerald Progress Ring */}
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="38"
+                      className="text-emerald-500 transition-all duration-700 ease-out"
+                      strokeWidth="10"
+                      strokeDasharray={238.76}
+                      strokeDashoffset={238.76 - (238.76 * overviewStats.summarizationPercentage) / 100}
+                      strokeLinecap="round"
+                      stroke="currentColor"
+                      fill="transparent"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                    <span className="text-3xl font-black text-gray-900 leading-none">
+                      {overviewStats.summarizationPercentage}%
+                    </span>
+                    <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mt-1">
+                      Coverage
+                    </span>
+                  </div>
+                </div>
+
+                {/* Detailed Breakdown */}
+                <div className="space-y-2.5 w-full text-xs">
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                      <span className="text-gray-700 font-medium">Vision Analyzed</span>
+                    </div>
+                    <span className="font-bold text-gray-900">{overviewStats.summarizedImagesCount} images</span>
+                  </div>
+
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                      <span className="text-gray-700 font-medium">Pending Analysis</span>
+                    </div>
+                    <span className="font-bold text-gray-900">{overviewStats.unsummarizedImagesCount} images</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-gray-500 pt-0.5">
+                    <span>Total Image Library</span>
+                    <span className="font-semibold text-gray-700">{images.length} images</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('images')}
+                className="w-full rounded-md bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 py-1.5 text-xs font-semibold text-center transition cursor-pointer"
+              >
+                Inspect Images & Trigger Summaries &rarr;
+              </button>
             </div>
           </div>
 
-          <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-5 space-y-2 text-xs text-blue-900">
-            <h3 className="font-bold text-sm text-blue-950 flex items-center gap-2">
-              <span>✅</span>
-              <span>All Admin Criteria Verified & Ready</span>
-            </h3>
-            <p className="leading-relaxed">
-              Use the tabs above to manage all system entities. Super admin authorization overrides ownership restrictions across the entire platform.
-            </p>
+          {/* Row 2: Conversion Funnel & Prompt Chain Routing Mix */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Conversion Funnel */}
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-2xs space-y-4">
+              <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                    <span>🎯</span>
+                    <span>Platform Conversion Funnel</span>
+                  </h3>
+                  <p className="text-xs text-gray-500">Progression from image upload to meme generation and likes</p>
+                </div>
+                <span className="rounded-full bg-purple-50 text-purple-700 px-2 py-0.5 text-[10px] font-bold">
+                  Pipeline Health
+                </span>
+              </div>
+
+              <div className="space-y-4 pt-1">
+                {/* Stage 1 */}
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between font-medium">
+                    <span className="text-gray-700 flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-[10px] font-bold">1</span>
+                      <span>Source Images Uploaded</span>
+                    </span>
+                    <span className="font-bold text-gray-900">{images.length} images (100%)</span>
+                  </div>
+                  <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-sky-500 rounded-full w-full"></div>
+                  </div>
+                  <p className="text-[11px] text-gray-400">Baseline community & admin image library</p>
+                </div>
+
+                {/* Stage 2 */}
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between font-medium">
+                    <span className="text-gray-700 flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-[10px] font-bold">2</span>
+                      <span>Converted to AI Memes</span>
+                    </span>
+                    <span className="font-bold text-purple-700">
+                      {overviewStats.imagesWithMemesCount} images ({overviewStats.imageToMemeConversion}%) &bull; {memes.length} memes
+                    </span>
+                  </div>
+                  <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      style={{ width: `${Math.max(8, overviewStats.imageToMemeConversion)}%` }}
+                      className="h-full bg-purple-600 rounded-full transition-all duration-500"
+                    ></div>
+                  </div>
+                  <p className="text-[11px] text-gray-400">Ratio of images that generated at least one AI meme</p>
+                </div>
+
+                {/* Stage 3 */}
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between font-medium">
+                    <span className="text-gray-700 flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center text-[10px] font-bold">3</span>
+                      <span>Liked / Engaged by Community</span>
+                    </span>
+                    <span className="font-bold text-rose-600">
+                      {overviewStats.memesWithLikesCount} memes ({overviewStats.memeEngagementRate}%) &bull; {overviewStats.totalLikes} likes
+                    </span>
+                  </div>
+                  <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      style={{ width: `${Math.max(8, overviewStats.memeEngagementRate)}%` }}
+                      className="h-full bg-rose-500 rounded-full transition-all duration-500"
+                    ></div>
+                  </div>
+                  <p className="text-[11px] text-gray-400">Ratio of generated memes that earned positive ratings</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Prompt Chain Routing Mix Breakdown */}
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-2xs space-y-4">
+              <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                    <span>⚖️</span>
+                    <span>Prompt Chain Routing Mix</span>
+                  </h3>
+                  <p className="text-xs text-gray-500">Weight proportion allocated across generative chains</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('prompt_chains')}
+                  className="text-xs text-purple-600 hover:text-purple-800 font-semibold cursor-pointer"
+                >
+                  Tune Mix &rarr;
+                </button>
+              </div>
+
+              {/* Segmented Distribution Bar */}
+              <div className="space-y-3 pt-1">
+                <div className="w-full h-4 bg-gray-100 rounded-full overflow-hidden flex shadow-inner">
+                  {overviewStats.mixWithChains.map((mix, idx) => {
+                    const colors = ['bg-purple-600', 'bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500'];
+                    const colorClass = colors[idx % colors.length];
+                    return (
+                      <div
+                        key={mix.id}
+                        style={{ width: `${mix.percentage}%` }}
+                        className={`h-full ${colorClass} transition-all duration-500`}
+                        title={`${mix.name}: ${mix.percentage}%`}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Legend Items */}
+                <div className="space-y-2 pt-1 text-xs">
+                  {overviewStats.mixWithChains.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic">No prompt chains configured in active mix.</p>
+                  ) : (
+                    overviewStats.mixWithChains.map((mix, idx) => {
+                      const dotColors = ['bg-purple-600', 'bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500'];
+                      const dotClass = dotColors[idx % dotColors.length];
+                      return (
+                        <div key={mix.id} className="flex items-center justify-between p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className={`w-3 h-3 rounded-full ${dotClass} flex-shrink-0`}></span>
+                            <span className="font-semibold text-gray-900 truncate">{mix.name}</span>
+                          </div>
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            <span className="text-gray-500 font-mono text-[11px]">Weight: {mix.weight}</span>
+                            <span className="font-bold text-gray-900 bg-white border border-gray-200 px-2 py-0.5 rounded text-[11px]">
+                              {mix.percentage}% of traffic
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <p className="text-[11px] text-gray-400 pt-1">
+                  Traffic routing is stochastic based on the relative weights configured in the Prompt Chains & Mix tab.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Row 3: Top Memes Leaderboard & System Health */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Top Memes Leaderboard */}
+            <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-5 shadow-2xs space-y-4">
+              <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                    <span>🏆</span>
+                    <span>Top Memes by Community Likes</span>
+                  </h3>
+                  <p className="text-xs text-gray-500">Highest rated AI captions and generated visual humor</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('media')}
+                  className="text-xs text-purple-600 hover:text-purple-800 font-semibold cursor-pointer"
+                >
+                  View All Media &rarr;
+                </button>
+              </div>
+
+              {overviewStats.topMemes.length === 0 ? (
+                <div className="p-8 text-center text-xs text-gray-400">
+                  No memes created yet. Upload images to generate captions.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {overviewStats.topMemes.map((m, index) => {
+                    const barWidth =
+                      overviewStats.maxLikesInTop > 0
+                        ? Math.max(12, Math.round(((m.likesCount || 0) / overviewStats.maxLikesInTop) * 100))
+                        : 0;
+
+                    const rankBadges = [
+                      'bg-amber-100 text-amber-800 border-amber-300',
+                      'bg-slate-100 text-slate-800 border-slate-300',
+                      'bg-orange-100 text-orange-800 border-orange-300',
+                      'bg-gray-100 text-gray-700 border-gray-200',
+                      'bg-gray-100 text-gray-700 border-gray-200',
+                    ];
+
+                    return (
+                      <div
+                        key={m.id}
+                        className="p-3 rounded-lg border border-gray-200 bg-gray-50/70 hover:bg-white transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <span className={`w-7 h-7 rounded-full flex items-center justify-center font-bold border text-[11px] flex-shrink-0 ${rankBadges[index]}`}>
+                            #{index + 1}
+                          </span>
+
+                          {m.displayUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={m.displayUrl}
+                              alt="Meme visual"
+                              className="w-10 h-10 object-cover rounded border border-gray-200 flex-shrink-0 bg-gray-100"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded border border-gray-200 bg-gray-200 flex items-center justify-center text-xs flex-shrink-0">
+                              🎭
+                            </div>
+                          )}
+
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-gray-900 italic line-clamp-1">
+                              &ldquo;{m.caption || 'No caption'}&rdquo;
+                            </p>
+                            <span className="text-[10px] text-gray-400">
+                              Created {new Date(m.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Relative Like Bar & Count */}
+                        <div className="flex items-center gap-3 w-full sm:w-44 flex-shrink-0">
+                          <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              style={{ width: `${barWidth}%` }}
+                              className="h-full bg-rose-500 rounded-full"
+                            />
+                          </div>
+                          <span className="inline-flex items-center gap-1 font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded text-[11px] flex-shrink-0">
+                            <span>❤️</span>
+                            <span>{m.likesCount || 0}</span>
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* System Infrastructure & Security Status */}
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-2xs space-y-4 flex flex-col justify-between">
+              <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                    <span>⚙️</span>
+                    <span>System Infrastructure</span>
+                  </h3>
+                  <p className="text-xs text-gray-500">Live configuration & security guardrails</p>
+                </div>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Operational</span>
+                </span>
+              </div>
+
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center justify-between p-2 rounded-md bg-gray-50">
+                  <span className="text-gray-600">LLM Providers</span>
+                  <span className="font-bold text-gray-900">
+                    {overviewStats.activeProviders} active ({providers.length} total)
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-md bg-gray-50">
+                  <span className="text-gray-600">LLM Models Configured</span>
+                  <span className="font-bold text-gray-900">
+                    {overviewStats.activeModels} active ({models.length} total)
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-md bg-gray-50">
+                  <span className="text-gray-600">Signup Allowed Domains</span>
+                  <span className="font-bold text-gray-900">{overviewStats.activeDomains} domains</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-md bg-gray-50">
+                  <span className="text-gray-600">Whitelisted VIP Emails</span>
+                  <span className="font-bold text-gray-900">{whitelistedEmails.length} emails</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-md bg-gray-50">
+                  <span className="text-gray-600">AI In-Context Examples</span>
+                  <span className="font-bold text-gray-900">{examples.length} examples</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-md bg-gray-50">
+                  <span className="text-gray-600">Generation Logs Recorded</span>
+                  <span className="font-bold text-gray-900">
+                    {genRequests.length} reqs / {llmResponses.length} resps
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3 space-y-1 text-xs text-blue-900">
+                <p className="font-semibold text-blue-950 flex items-center gap-1.5">
+                  <span>🛡️</span>
+                  <span>Super Admin Privilege Active</span>
+                </p>
+                <p className="text-[11px] text-blue-800 leading-relaxed">
+                  You have full CRUD access across all system entities. Use the tabs above to manage users, moderation, chains, and models.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}
