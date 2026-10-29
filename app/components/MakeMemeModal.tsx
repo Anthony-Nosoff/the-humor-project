@@ -66,7 +66,13 @@ export default function MakeMemeModal({
         }),
       });
 
-      const data = await response.json();
+      const resText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        throw new Error(`Server returned HTTP ${response.status}: ${resText || response.statusText}`);
+      }
 
       if (!response.ok || !data.success) {
         throw new Error(data.error || 'Failed to generate caption with Gemini');
@@ -112,7 +118,13 @@ export default function MakeMemeModal({
         }),
       });
 
-      const data = await response.json();
+      const resText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        throw new Error(`Server returned HTTP ${response.status}: ${resText || response.statusText}`);
+      }
 
       if (!response.ok || !data.success) {
         throw new Error(data.error || 'Failed to save meme');

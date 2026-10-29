@@ -22,8 +22,148 @@ export default function MyImagesPage() {
   const [images, setImages] = useState<DisplayImage[]>([]);
   const [fetchingImages, setFetchingImages] = useState(false);
   const [selectedImage, setSelectedImage] = useState<DisplayImage | null>(null);
+  const [imageMemes, setImageMemes] = useState<Database['public']['Tables']['memes']['Row'][]>([]);
+  const [loadingImageMemes, setLoadingImageMemes] = useState(false);
   const [memeTargetImage, setMemeTargetImage] = useState<DisplayImage | null>(null);
+  const [memeToDelete, setMemeToDelete] = useState<Database['public']['Tables']['memes']['Row'] | null>(null);
+  const [deletingMemeId, setDeletingMemeId] = useState<string | null>(null);
+  const [imageToDelete, setImageToDelete] = useState<DisplayImage | null>(null);
+  const [imageMemesCountToDelete, setImageMemesCountToDelete] = useState<number | null>(null);
+  const [deletingImage, setDeletingImage] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const fetchImageMemes = useCallback(async (imageId: string) => {
+    setLoadingImageMemes(true);
+    try {
+      const { data, error } = await supabase
+        .from('memes')
+        .select('*')
+        .eq('image_id', imageId)
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        setImageMemes(data);
+      } else {
+        setImageMemes([]);
+      }
+    } catch (err) {
+      console.error('Error fetching memes for image:', err);
+      setImageMemes([]);
+    } finally {
+      setLoadingImageMemes(false);
+    }
+  }, []);
+
+  const handleSelectImage = (img: DisplayImage) => {
+    setSelectedImage(img);
+    setImageMemes([]);
+    fetchImageMemes(img.id);
+  };
+
+  const handleCloseImageDetails = () => {
+    setSelectedImage(null);
+    setImageMemes([]);
+  };
+
+  const handleDeleteMeme = async () => {
+    if (!memeToDelete || !session?.access_token) return;
+    setDeletingMemeId(memeToDelete.id);
+    try {
+      const res = await fetch(`/api/memes?id=${encodeURIComponent(memeToDelete.id)}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      const resText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        throw new Error(`Server returned HTTP ${res.status}: ${resText || res.statusText}`);
+      }
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete meme');
+      }
+
+      setImageMemes((prev) => prev.filter((m) => m.id !== memeToDelete.id));
+      setToastMessage('Meme deleted successfully!');
+      setTimeout(() => setToastMessage(null), 3000);
+      setMemeToDelete(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete meme';
+      console.error('Error deleting meme:', err);
+      setToastMessage(msg);
+      setTimeout(() => setToastMessage(null), 3500);
+    } finally {
+      setDeletingMemeId(null);
+    }
+  };
+
+  const handleRequestDeleteImage = async (img: DisplayImage) => {
+    setImageToDelete(img);
+    if (selectedImage?.id === img.id) {
+      setImageMemesCountToDelete(imageMemes.length);
+    } else {
+      try {
+        const { count } = await supabase
+          .from('memes')
+          .select('*', { count: 'exact', head: true })
+          .eq('image_id', img.id);
+        setImageMemesCountToDelete(count ?? null);
+      } catch {
+        setImageMemesCountToDelete(null);
+      }
+    }
+  };
+
+  const handleConfirmDeleteImage = async () => {
+    if (!imageToDelete || !session?.access_token) return;
+    setDeletingImage(true);
+
+    try {
+      const res = await fetch(`/api/images?id=${encodeURIComponent(imageToDelete.id)}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      const resText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        throw new Error(`Server returned HTTP ${res.status}: ${resText || res.statusText}`);
+      }
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete image');
+      }
+
+      setImages((prev) => prev.filter((img) => img.id !== imageToDelete.id));
+      if (selectedImage?.id === imageToDelete.id) {
+        handleCloseImageDetails();
+      }
+      setImageToDelete(null);
+      const memesCount = data.deletedMemesCount ?? 0;
+      setToastMessage(
+        memesCount > 0
+          ? `Image and ${memesCount} corresponding meme${memesCount === 1 ? '' : 's'} deleted.`
+          : 'Image deleted successfully.'
+      );
+      setTimeout(() => setToastMessage(null), 3500);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete image';
+      console.error('Error deleting image:', err);
+      setToastMessage(msg);
+      setTimeout(() => setToastMessage(null), 3500);
+    } finally {
+      setDeletingImage(false);
+    }
+  };
 
   const loadUserImages = useCallback(async (userId: string) => {
     setFetchingImages(true);
@@ -223,7 +363,7 @@ export default function MyImagesPage() {
           {images.map((image) => (
             <div
               key={image.id}
-              onClick={() => setSelectedImage(image)}
+              onClick={() => handleSelectImage(image)}
               className="group relative aspect-square w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-100 shadow-2xs hover:shadow-md transition cursor-pointer"
             >
               {image.displayUrl ? (
@@ -248,24 +388,39 @@ export default function MyImagesPage() {
                 </div>
               )}
 
-              {/* Overlay with description and make meme button on hover */}
-              {image.description && (
-                <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/50 to-transparent p-3 pt-8 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end">
+              {/* Overlay with description and action buttons on hover */}
+              <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/50 to-transparent p-3 pt-8 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end">
+                {image.description && (
                   <p className="text-xs text-white line-clamp-2 leading-snug mb-2">
                     {image.description}
                   </p>
+                )}
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       setMemeTargetImage(image);
                     }}
-                    className="w-full text-center rounded bg-purple-600 hover:bg-purple-700 py-1 text-[11px] font-semibold text-white transition cursor-pointer shadow-xs"
+                    className="flex-1 text-center rounded bg-purple-600 hover:bg-purple-700 py-1 text-[11px] font-semibold text-white transition cursor-pointer shadow-xs"
                   >
                     🎭 Make meme
                   </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRequestDeleteImage(image);
+                    }}
+                    className="rounded bg-red-600/90 hover:bg-red-700 p-1 text-white transition cursor-pointer shadow-xs"
+                    title="Delete image entirely"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
           ))}
         </div>
@@ -275,7 +430,7 @@ export default function MyImagesPage() {
       {selectedImage && (
         <div
           className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs"
-          onClick={() => setSelectedImage(null)}
+          onClick={handleCloseImageDetails}
         >
           <div
             className="relative max-w-2xl w-full bg-white rounded-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
@@ -296,7 +451,18 @@ export default function MyImagesPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSelectedImage(null)}
+                  onClick={() => handleRequestDeleteImage(selectedImage)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition cursor-pointer shadow-xs"
+                  title="Delete image entirely"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span>Delete Image</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseImageDetails}
                   className="rounded-md p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
                 >
                   <span className="sr-only">Close</span>
@@ -331,9 +497,233 @@ export default function MyImagesPage() {
                 </p>
               )}
 
+              {/* Memes created from this image */}
+              <div className="rounded-lg border border-gray-200 bg-gray-50/70 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">
+                    Memes created from this image ({imageMemes.length})
+                  </h4>
+                </div>
+
+                {loadingImageMemes ? (
+                  <p className="text-xs text-gray-400">Loading memes...</p>
+                ) : imageMemes.length === 0 ? (
+                  <p className="text-xs text-gray-500 italic">
+                    No memes have been made with this image yet. Click &ldquo;Make meme&rdquo; above to create one!
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {imageMemes.map((m) => (
+                      <div
+                        key={m.id}
+                        className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white p-3 shadow-2xs"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-gray-900 text-sm line-clamp-2">
+                            &ldquo;{m.caption}&rdquo;
+                          </p>
+                          <span className="text-[11px] text-gray-400">
+                            Created {new Date(m.created_at).toLocaleDateString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setMemeToDelete(m)}
+                          disabled={deletingMemeId === m.id}
+                          className="inline-flex items-center gap-1 rounded px-2.5 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 border border-transparent hover:border-red-200 transition cursor-pointer disabled:opacity-50"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="text-xs text-gray-400">
                 Uploaded: {new Date(selectedImage.created_at).toLocaleString()}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Meme Confirmation Modal */}
+      {memeToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs"
+          onClick={() => !deletingMemeId && setMemeToDelete(null)}
+        >
+          <div
+            className="relative max-w-md w-full bg-white rounded-xl shadow-2xl overflow-hidden p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="rounded-full bg-red-100 p-2.5">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Delete Meme</h3>
+                <p className="text-xs text-gray-500">This action cannot be undone.</p>
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm text-gray-700">
+              <p className="font-medium text-gray-900 line-clamp-2">
+                &ldquo;{memeToDelete.caption}&rdquo;
+              </p>
+            </div>
+
+            <p className="text-xs text-gray-600">
+              Are you sure you want to delete this meme? It will be removed from your images and the community memes feed.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={Boolean(deletingMemeId)}
+                onClick={() => setMemeToDelete(null)}
+                className="rounded-md border border-gray-300 px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(deletingMemeId)}
+                onClick={handleDeleteMeme}
+                className="inline-flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 transition cursor-pointer shadow-xs disabled:opacity-50"
+              >
+                {deletingMemeId ? (
+                  <>
+                    <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Delete Meme</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Image Entirely Confirmation Modal with Prominent Warning */}
+      {imageToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs"
+          onClick={() => !deletingImage && setImageToDelete(null)}
+        >
+          <div
+            className="relative max-w-lg w-full bg-white rounded-xl shadow-2xl overflow-hidden p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="rounded-full bg-red-100 p-2.5 flex-shrink-0">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Delete Image Entirely?</h3>
+                <p className="text-xs text-red-600 font-medium">Warning: This action is permanent and cannot be undone.</p>
+              </div>
+            </div>
+
+            {/* Thumbnail preview */}
+            {imageToDelete.displayUrl && (
+              <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+                <div className="h-16 w-16 bg-gray-900 rounded overflow-hidden flex-shrink-0 flex items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={imageToDelete.displayUrl}
+                    alt="Preview"
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-gray-500 font-medium">Uploaded Image</p>
+                  <p className="text-xs text-gray-800 line-clamp-2 mt-0.5">
+                    {imageToDelete.description || 'No description'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Prominent Warning Callout */}
+            <div className="rounded-lg border-2 border-red-200 bg-red-50 p-3.5 space-y-1.5">
+              <div className="flex items-center gap-2 text-red-800 font-bold text-xs">
+                <span>⚠️ Important Warning</span>
+              </div>
+              <p className="text-xs text-red-900 leading-relaxed">
+                Deleting this image will <strong>permanently delete</strong>:
+              </p>
+              <ul className="text-xs text-red-800 list-disc list-inside space-y-0.5 pl-1">
+                <li>The uploaded image file and its Gemini summary</li>
+                <li>
+                  <strong>ALL corresponding memes</strong> created from this image
+                  {imageMemesCountToDelete !== null && imageMemesCountToDelete > 0
+                    ? ` (${imageMemesCountToDelete} meme${imageMemesCountToDelete === 1 ? '' : 's'})`
+                    : ''}
+                </li>
+                <li>All community ratings and likes on those memes</li>
+              </ul>
+            </div>
+
+            <p className="text-xs text-gray-600">
+              Are you sure you want to proceed? None of this content can be recovered once deleted.
+            </p>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={deletingImage}
+                onClick={() => setImageToDelete(null)}
+                className="rounded-md border border-gray-300 px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingImage}
+                onClick={handleConfirmDeleteImage}
+                className="inline-flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 transition cursor-pointer shadow-xs disabled:opacity-50"
+              >
+                {deletingImage ? (
+                  <>
+                    <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <span>Deleting Image & Memes...</span>
+                  </>
+                ) : (
+                  <span>Delete Image & All Corresponding Memes</span>
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -344,9 +734,12 @@ export default function MyImagesPage() {
         isOpen={!!memeTargetImage}
         onClose={() => setMemeTargetImage(null)}
         image={memeTargetImage}
-        onMemeCreated={() => {
+        onMemeCreated={(newMeme) => {
           setToastMessage('Meme created successfully!');
           setTimeout(() => setToastMessage(null), 3500);
+          if (selectedImage?.id === newMeme.image_id) {
+            setImageMemes((prev) => [newMeme, ...prev]);
+          }
         }}
       />
     </div>

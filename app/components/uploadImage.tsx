@@ -8,19 +8,6 @@ import type { Session } from '@supabase/supabase-js';
 import MarkdownRenderer from '@/app/components/markdownRenderer';
 import MakeMemeModal from '@/app/components/MakeMemeModal';
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.includes(',') ? result.split(',')[1] : result;
-      resolve(base64);
-    };
-    reader.onerror = (error) => reject(error);
-  });
-}
-
 interface UploadedImageState {
   id: string;
   url: string;
@@ -147,7 +134,6 @@ export default function UploadImage() {
 
       // 3. Send image to Gemini server-side request to create summary and update public.images row
       setStatusText('Generating summary with Gemini...');
-      const base64Data = await fileToBase64(file);
 
       const summarizeRes = await fetch('/api/images/summarize', {
         method: 'POST',
@@ -161,11 +147,18 @@ export default function UploadImage() {
           imageId: imageRow.id,
           imagePath: storageData.path,
           mimeType: file.type || 'image/jpeg',
-          imageBase64: base64Data,
         }),
       });
 
-      const summarizeResult = await summarizeRes.json();
+      const responseText = await summarizeRes.text();
+      let summarizeResult;
+      try {
+        summarizeResult = JSON.parse(responseText);
+      } catch {
+        throw new Error(
+          `Server returned HTTP ${summarizeRes.status}: ${responseText || summarizeRes.statusText}`
+        );
+      }
 
       if (!summarizeRes.ok) {
         console.warn('Gemini summary error:', summarizeResult.error);
