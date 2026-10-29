@@ -124,7 +124,24 @@ export default function AdminPage() {
   const [editingEmail, setEditingEmail] = useState<WhitelistedEmails | null>(null);
   const [emailForm, setEmailForm] = useState({ email: '', notes: '' });
 
-  // 8. Chain Mix Edit
+  // 8. Prompt Chain & Steps Modals
+  const [isChainModalOpen, setIsChainModalOpen] = useState(false);
+  const [editingChain, setEditingChain] = useState<PromptChains | null>(null);
+  const [chainForm, setChainForm] = useState({ name: '', description: '' });
+  const [chainToDelete, setChainToDelete] = useState<PromptChains | null>(null);
+
+  const [isStepModalOpen, setIsStepModalOpen] = useState(false);
+  const [editingStep, setEditingStep] = useState<PromptChainSteps | null>(null);
+  const [stepTargetChainId, setStepTargetChainId] = useState('');
+  const [stepForm, setStepForm] = useState({
+    step_name: '',
+    step_order: 1,
+    prompt_template: '',
+    model_id: 'gemini-2.5-flash',
+  });
+  const [stepToDelete, setStepToDelete] = useState<PromptChainSteps | null>(null);
+
+  // 9. Chain Mix Edit
   const [mixEdits, setMixEdits] = useState<Record<string, { weight: number; is_active: boolean; notes: string }>>({});
 
   const showToast = (msg: string) => {
@@ -497,6 +514,184 @@ export default function AdminPage() {
       setMemeToDelete(null);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Delete failed';
+      showToast(msg);
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  // ==========================================
+  // PROMPT CHAINS CRUD
+  // ==========================================
+  const handleSaveChain = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chainForm.name.trim()) {
+      showToast('Chain name is required.');
+      return;
+    }
+
+    setActionInProgress('saving_chain');
+    try {
+      if (editingChain) {
+        const { data, error } = await supabase
+          .from('prompt_chains')
+          .update({
+            name: chainForm.name.trim(),
+            description: chainForm.description.trim() || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', editingChain.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        setPromptChains((prev) => prev.map((c) => (c.id === editingChain.id ? data : c)));
+        showToast('Prompt chain updated successfully.');
+      } else {
+        const { data, error } = await supabase
+          .from('prompt_chains')
+          .insert({
+            name: chainForm.name.trim(),
+            description: chainForm.description.trim() || null,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        setPromptChains((prev) => [...prev, data]);
+
+        // Automatically register in prompt_chain_mix with default weight 0.25
+        const { data: mixData, error: mixError } = await supabase
+          .from('prompt_chain_mix')
+          .insert({
+            chain_id: data.id,
+            weight: 0.25,
+            is_active: true,
+            notes: `Default mix for ${data.name}`,
+          })
+          .select()
+          .single();
+
+        if (!mixError && mixData) {
+          setChainMix((prev) => [...prev, mixData]);
+          setMixEdits((prev) => ({
+            ...prev,
+            [mixData.id]: { weight: 0.25, is_active: true, notes: mixData.notes || '' },
+          }));
+        }
+
+        showToast('Prompt chain created and added to routing mix.');
+      }
+
+      setIsChainModalOpen(false);
+      setEditingChain(null);
+      setChainForm({ name: '', description: '' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to save prompt chain';
+      showToast(msg);
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  const handleDeleteChain = async () => {
+    if (!chainToDelete) return;
+    setActionInProgress(chainToDelete.id);
+    try {
+      const { error } = await supabase.from('prompt_chains').delete().eq('id', chainToDelete.id);
+      if (error) throw error;
+
+      setPromptChains((prev) => prev.filter((c) => c.id !== chainToDelete.id));
+      setChainSteps((prev) => prev.filter((s) => s.chain_id !== chainToDelete.id));
+      setChainMix((prev) => prev.filter((m) => m.chain_id !== chainToDelete.id));
+      setMixEdits((prev) => {
+        const copy = { ...prev };
+        const mixForChain = chainMix.find((m) => m.chain_id === chainToDelete.id);
+        if (mixForChain) delete copy[mixForChain.id];
+        return copy;
+      });
+
+      showToast(`Prompt chain "${chainToDelete.name}" and associated steps deleted.`);
+      setChainToDelete(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete prompt chain';
+      showToast(msg);
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  // ==========================================
+  // PROMPT CHAIN STEPS CRUD
+  // ==========================================
+  const handleSaveStep = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stepForm.step_name.trim() || !stepForm.prompt_template.trim()) {
+      showToast('Step name and prompt template are required.');
+      return;
+    }
+
+    setActionInProgress('saving_step');
+    try {
+      if (editingStep) {
+        const { data, error } = await supabase
+          .from('prompt_chain_steps')
+          .update({
+            step_name: stepForm.step_name.trim(),
+            step_order: Number(stepForm.step_order) || 1,
+            prompt_template: stepForm.prompt_template.trim(),
+            model_id: stepForm.model_id.trim() || null,
+          })
+          .eq('id', editingStep.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        setChainSteps((prev) =>
+          prev.map((s) => (s.id === editingStep.id ? data : s)).sort((a, b) => a.step_order - b.step_order)
+        );
+        showToast('Step updated.');
+      } else {
+        const { data, error } = await supabase
+          .from('prompt_chain_steps')
+          .insert({
+            chain_id: stepTargetChainId,
+            step_name: stepForm.step_name.trim(),
+            step_order: Number(stepForm.step_order) || 1,
+            prompt_template: stepForm.prompt_template.trim(),
+            model_id: stepForm.model_id.trim() || null,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        setChainSteps((prev) => [...prev, data].sort((a, b) => a.step_order - b.step_order));
+        showToast('New step added to chain.');
+      }
+
+      setIsStepModalOpen(false);
+      setEditingStep(null);
+      setStepForm({ step_name: '', step_order: 1, prompt_template: '', model_id: 'gemini-2.5-flash' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to save prompt chain step';
+      showToast(msg);
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  const handleDeleteStep = async () => {
+    if (!stepToDelete) return;
+    setActionInProgress(stepToDelete.id);
+    try {
+      const { error } = await supabase.from('prompt_chain_steps').delete().eq('id', stepToDelete.id);
+      if (error) throw error;
+
+      setChainSteps((prev) => prev.filter((s) => s.id !== stepToDelete.id));
+      showToast(`Step "${stepToDelete.step_name}" deleted.`);
+      setStepToDelete(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete step';
       showToast(msg);
     } finally {
       setActionInProgress(null);
@@ -1995,55 +2190,202 @@ export default function AdminPage() {
       {/* ========================================================= */}
       {activeTab === 'prompt_chains' && (
         <div className="space-y-6">
-          {/* Section A: Prompt Chains (Read) & Steps (Read) */}
+          {/* Section A: Prompt Chains (CRUD) & Sequential Steps (CRUD) */}
           <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4 shadow-2xs">
-            <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-              <span>⛓️</span>
-              <span>Prompt Chains & Steps</span>
-            </h3>
-
-            <div className="space-y-4">
-              {promptChains.map((chain) => {
-                const steps = chainSteps.filter((s) => s.chain_id === chain.id);
-                return (
-                  <div key={chain.id} className="rounded-lg border border-gray-200 bg-gray-50/70 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-bold text-gray-900 text-xs">{chain.name}</h4>
-                        <p className="text-[11px] text-gray-500 mt-0.5">{chain.description}</p>
-                      </div>
-                      <span className="text-[11px] text-gray-400 font-mono">Chain ID: {chain.id.slice(0, 8)}...</span>
-                    </div>
-
-                    <div className="space-y-2">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                        Chain Steps ({steps.length})
-                      </span>
-                      {steps.length === 0 ? (
-                        <p className="text-xs text-gray-400 italic">No steps registered for this chain.</p>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {steps.map((st) => (
-                            <div key={st.id} className="rounded border border-gray-200 bg-white p-2.5 text-xs flex items-start gap-3">
-                              <span className="rounded bg-indigo-50 text-indigo-700 font-bold px-1.5 py-0.5 text-[10px]">
-                                Step {st.step_order}
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-gray-900">{st.step_name}</p>
-                                <p className="text-[11px] text-gray-600 font-mono mt-0.5 bg-gray-50 p-1 rounded">
-                                  {st.prompt_template}
-                                </p>
-                              </div>
-                              <span className="text-[10px] text-gray-400 font-mono">{st.model_id || 'default'}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <span>⛓️</span>
+                  <span>Prompt Chains & Sequential Steps (CRUD)</span>
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Create, view, edit multi-stage generation chains, step prompt templates, and AI models.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingChain(null);
+                  setChainForm({ name: '', description: '' });
+                  setIsChainModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-md bg-purple-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-purple-700 transition cursor-pointer shadow-xs flex-shrink-0"
+              >
+                <span>+</span>
+                <span>Create Prompt Chain</span>
+              </button>
             </div>
+
+            {promptChains.length === 0 ? (
+              <div className="p-8 text-center text-xs text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                <p className="font-semibold text-gray-600 mb-2">No prompt chains configured</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingChain(null);
+                    setChainForm({ name: '', description: '' });
+                    setIsChainModalOpen(true);
+                  }}
+                  className="rounded bg-purple-600 px-3 py-1.5 text-xs text-white font-semibold hover:bg-purple-700"
+                >
+                  Create First Prompt Chain
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {promptChains.map((chain) => {
+                  const steps = chainSteps.filter((s) => s.chain_id === chain.id);
+                  return (
+                    <div key={chain.id} className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 sm:p-5 space-y-4 shadow-2xs">
+                      {/* Chain Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 border-b border-gray-200 pb-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-gray-900 text-sm">{chain.name}</h4>
+                            <span className="text-[10px] text-gray-400 font-mono bg-white border border-gray-200 px-1.5 py-0.5 rounded">
+                              ID: {chain.id.slice(0, 8)}...
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-600">{chain.description || 'No description provided.'}</p>
+                          <span className="text-[10px] text-gray-400 block">
+                            Last updated: {new Date(chain.updated_at || chain.created_at).toLocaleString()}
+                          </span>
+                        </div>
+
+                        {/* Chain Action Buttons */}
+                        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setStepTargetChainId(chain.id);
+                              setEditingStep(null);
+                              setStepForm({
+                                step_name: '',
+                                step_order: steps.length + 1,
+                                prompt_template: '',
+                                model_id: 'gemini-2.5-flash',
+                              });
+                              setIsStepModalOpen(true);
+                            }}
+                            className="rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 text-xs font-semibold transition cursor-pointer"
+                          >
+                            + Add Step
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingChain(chain);
+                              setChainForm({
+                                name: chain.name,
+                                description: chain.description || '',
+                              });
+                              setIsChainModalOpen(true);
+                            }}
+                            className="rounded-md bg-white text-gray-700 hover:bg-gray-100 border border-gray-300 px-2.5 py-1 text-xs font-semibold transition cursor-pointer"
+                          >
+                            ✏️ Edit Chain
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setChainToDelete(chain)}
+                            className="rounded-md bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-2.5 py-1 text-xs font-semibold transition cursor-pointer"
+                          >
+                            🗑️ Delete
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Chain Steps Section */}
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                            Sequential Pipeline Steps ({steps.length})
+                          </span>
+                          <span className="text-[10px] text-gray-400">
+                            Executed sequentially by order number
+                          </span>
+                        </div>
+
+                        {steps.length === 0 ? (
+                          <div className="p-4 rounded-lg border border-dashed border-gray-300 bg-white text-center text-xs text-gray-400">
+                            No execution steps defined yet for this chain.{' '}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStepTargetChainId(chain.id);
+                                setEditingStep(null);
+                                setStepForm({
+                                  step_name: '',
+                                  step_order: 1,
+                                  prompt_template: '',
+                                  model_id: 'gemini-2.5-flash',
+                                });
+                                setIsStepModalOpen(true);
+                              }}
+                              className="text-indigo-600 hover:underline font-semibold ml-1 cursor-pointer"
+                            >
+                              Add first step
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {steps.map((st) => (
+                              <div
+                                key={st.id}
+                                className="rounded-lg border border-gray-200 bg-white p-3 text-xs space-y-2 shadow-2xs hover:border-gray-300 transition"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="rounded-full bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 text-[10px] flex-shrink-0">
+                                      Step {st.step_order}
+                                    </span>
+                                    <span className="font-bold text-gray-900 truncate">{st.step_name}</span>
+                                    <span className="text-[10px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-100 flex-shrink-0">
+                                      🤖 {st.model_id || 'gemini-2.5-flash'}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setStepTargetChainId(chain.id);
+                                        setEditingStep(st);
+                                        setStepForm({
+                                          step_name: st.step_name,
+                                          step_order: st.step_order,
+                                          prompt_template: st.prompt_template,
+                                          model_id: st.model_id || 'gemini-2.5-flash',
+                                        });
+                                        setIsStepModalOpen(true);
+                                      }}
+                                      className="text-blue-600 hover:underline font-semibold"
+                                    >
+                                      Edit Step
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setStepToDelete(st)}
+                                      className="text-red-600 hover:underline font-semibold ml-1"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="rounded bg-gray-50 border border-gray-200 p-2.5 font-mono text-[11px] text-gray-800 whitespace-pre-wrap leading-relaxed">
+                                  {st.prompt_template}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Section B: Prompt Chain Mix (Read / Update) */}
@@ -2909,7 +3251,238 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* 8. Delete Confirmation Modals */}
+      {/* 8. Prompt Chain Modal */}
+      {isChainModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full space-y-4">
+            <h3 className="text-base font-bold text-gray-900">
+              {editingChain ? 'Edit Prompt Chain' : 'Create New Prompt Chain'}
+            </h3>
+            <form onSubmit={handleSaveChain} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Chain Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={chainForm.name}
+                  onChange={(e) => setChainForm({ ...chainForm, name: e.target.value })}
+                  placeholder="e.g. Satirical Punchline Generator"
+                  className="w-full rounded border border-gray-300 p-2 text-xs text-gray-900"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Description & Objective
+                </label>
+                <textarea
+                  rows={3}
+                  value={chainForm.description}
+                  onChange={(e) => setChainForm({ ...chainForm, description: e.target.value })}
+                  placeholder="Describe the pipeline purpose (e.g. Extracts visual context then generates witty punchline)..."
+                  className="w-full rounded border border-gray-300 p-2 text-xs text-gray-900"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsChainModalOpen(false);
+                    setEditingChain(null);
+                  }}
+                  className="rounded px-3 py-1.5 text-xs text-gray-600 border border-gray-300 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionInProgress === 'saving_chain'}
+                  className="rounded bg-purple-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {actionInProgress === 'saving_chain' ? 'Saving...' : editingChain ? 'Update Chain' : 'Create Chain'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 9. Prompt Chain Step Modal */}
+      {isStepModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-lg w-full space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+              <h3 className="text-base font-bold text-gray-900">
+                {editingStep ? 'Edit Chain Step' : 'Add Step to Prompt Chain'}
+              </h3>
+              <span className="text-xs text-gray-500 font-medium truncate max-w-[200px]">
+                {promptChains.find((c) => c.id === stepTargetChainId)?.name || 'Prompt Chain'}
+              </span>
+            </div>
+            <form onSubmit={handleSaveStep} className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Step Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={stepForm.step_name}
+                    onChange={(e) => setStepForm({ ...stepForm, step_name: e.target.value })}
+                    placeholder="e.g. Scene Irony Analysis"
+                    className="w-full rounded border border-gray-300 p-2 text-xs text-gray-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Step Order <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={stepForm.step_order}
+                    onChange={(e) => setStepForm({ ...stepForm, step_order: parseInt(e.target.value) || 1 })}
+                    className="w-full rounded border border-gray-300 p-2 text-xs text-center font-bold text-gray-900"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Target AI Model
+                </label>
+                <input
+                  type="text"
+                  list="models-datalist"
+                  value={stepForm.model_id}
+                  onChange={(e) => setStepForm({ ...stepForm, model_id: e.target.value })}
+                  placeholder="gemini-2.5-flash"
+                  className="w-full rounded border border-gray-300 p-2 text-xs font-mono text-gray-900"
+                />
+                <datalist id="models-datalist">
+                  <option value="gemini-2.5-flash" />
+                  <option value="gemini-3.8-flash" />
+                  <option value="gemini-1.5-flash" />
+                  <option value="gpt-4o-mini" />
+                  {models.map((m) => (
+                    <option key={m.id} value={m.model_id}>
+                      {m.display_name} ({m.model_id})
+                    </option>
+                  ))}
+                </datalist>
+                <p className="text-[11px] text-gray-400 mt-0.5">Select from configured models or enter a custom model ID.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Prompt Template <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  value={stepForm.prompt_template}
+                  onChange={(e) => setStepForm({ ...stepForm, prompt_template: e.target.value })}
+                  placeholder="e.g. Analyze the humorous contradictions in the image description: {{description}}"
+                  className="w-full rounded border border-gray-300 p-2 text-xs font-mono text-gray-900"
+                />
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  Dynamic variables like &ldquo;{"{{description}}"}&rdquo; will be injected during pipeline execution.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsStepModalOpen(false);
+                    setEditingStep(null);
+                  }}
+                  className="rounded px-3 py-1.5 text-xs text-gray-600 border border-gray-300 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionInProgress === 'saving_step'}
+                  className="rounded bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {actionInProgress === 'saving_step' ? 'Saving...' : editingStep ? 'Update Step' : 'Add Step'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Chain Confirmation Modal */}
+      {chainToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full space-y-4">
+            <h3 className="text-base font-bold text-red-600 flex items-center gap-2">
+              <span>⚠️</span>
+              <span>Confirm Delete Prompt Chain</span>
+            </h3>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              Are you sure you want to delete prompt chain <strong className="text-gray-900">&ldquo;{chainToDelete.name}&rdquo;</strong>?
+              This will permanently delete the chain, all of its execution steps, and its routing weight allocation.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setChainToDelete(null)}
+                className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteChain}
+                disabled={Boolean(actionInProgress)}
+                className="rounded bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {actionInProgress ? 'Deleting...' : 'Confirm Delete Chain'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Step Confirmation Modal */}
+      {stepToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full space-y-4">
+            <h3 className="text-base font-bold text-red-600 flex items-center gap-2">
+              <span>⚠️</span>
+              <span>Confirm Delete Step</span>
+            </h3>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              Are you sure you want to delete step <strong className="text-gray-900">&ldquo;{stepToDelete.step_name}&rdquo;</strong> (Step #{stepToDelete.step_order})?
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setStepToDelete(null)}
+                className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteStep}
+                disabled={Boolean(actionInProgress)}
+                className="rounded bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {actionInProgress ? 'Deleting...' : 'Confirm Delete Step'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 10. Delete Confirmation Modals */}
       {imageToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
           <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full space-y-4">

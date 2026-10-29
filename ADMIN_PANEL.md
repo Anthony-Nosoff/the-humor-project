@@ -15,8 +15,8 @@ The admin panel implements 100% of the administrative criteria:
 | Capability | Database Table | Actions Available in Admin Panel |
 |---|---|---|
 | **Read Users** | `public.profiles` | Inspect all registered user IDs, full names, emails, signup timestamps, and toggle Super Admin status. |
-| **Read Prompt Chains** | `public.prompt_chains` | View all multi-stage prompt chains and their descriptions. |
-| **Read Prompt Chain Steps** | `public.prompt_chain_steps` | Inspect sequential steps per chain, including step order, step name, prompt template, and target model. |
+| **CRUD Prompt Chains** | `public.prompt_chains` | Create new multi-stage prompt generation chains, edit chain names & descriptions, and delete chains with cascading step and mix cleanup. |
+| **CRUD Prompt Chain Steps** | `public.prompt_chain_steps` | Create, edit, and delete sequential pipeline execution steps per chain, including step order, step name, prompt template (with `{{description}}` interpolation), and target LLM model. |
 | **Read / Update Prompt Chain Mix** | `public.prompt_chain_mix` | Inspect and edit generation routing weights (`0.0 - 1.0`), toggle active status, and update configuration notes. |
 | **CRUD Terms** | `public.terms` | Create, read, edit definitions/categories, and delete humor terms, techniques, and prompt vocabulary. |
 | **Read / View AI Generated Media** | `public.memes` | Browse all AI-generated captions and visual meme media with live render cards and like counters. |
@@ -50,7 +50,8 @@ The admin dashboard organizes these tools across focused views:
    - **✨ Gemini Trigger**: One-click generation or re-generation of multimodal summaries.
 4. **🎭 AI Generated Media**: View community memes, inspect captions, like totals, and moderate inappropriate media.
 5. **⛓️ Prompt Chains & Mix**:
-   - Inspect Chains & Sequential Steps
+   - **Full CRUD for Prompt Chains**: Create new prompt chains, edit names/objectives, and delete chains with cascading cleanup.
+   - **Full CRUD for Sequential Steps**: Add steps to any chain, configure execution `step_order`, edit `prompt_template` (supports `{{description}}`), and assign target LLM model IDs.
    - Inline weight and active status editor for **Prompt Chain Mix**
    - Full CRUD modal for **AI Generation Examples**
 6. **🤖 LLM Models & Providers**:
