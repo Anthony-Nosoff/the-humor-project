@@ -110,7 +110,6 @@ export default function Page() {
 
     return (
       <>
-        <h2 className="text-xl font-semibold">The Humor Project Assignment 3: Auth</h2>
         <span id="profile-page" className="text-2xl font-bold">Profile Page</span>
         <p className="text-lg">This page is protected and requires authentication to access.</p>
         <p className="text-lg">If you are seeing this page, it means you are successfully authenticated.</p>
@@ -203,7 +202,6 @@ export default function Page() {
     console.log('User is not authenticated');
     return (
       <>
-        <h2 className="text-xl font-semibold">The Humor Project Assignment 3: Auth</h2>
         <span id="profile-page" className="text-2xl font-bold">Profile Page</span>
         <p className="text-lg">This page is protected and requires authentication to access.</p>
         <p className="text-lg">You are not authenticated. Please log in to access this page.</p>
