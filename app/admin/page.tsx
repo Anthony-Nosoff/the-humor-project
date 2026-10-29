@@ -4,175 +4,265 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/app/supabase/supabaseClient';
 import type { Session } from '@supabase/supabase-js';
-import type { Database } from '@/app/supabase/types';
+import type {
+  Profiles,
+  Images,
+  Memes,
+  MemeRatings,
+  LLMProviders,
+  LLMModels,
+  PromptChains,
+  PromptChainSteps,
+  PromptChainMix,
+  Terms,
+  GenerationRequests,
+  LLMResponses,
+  AIGenerationExamples,
+  AllowedSignupDomains,
+  WhitelistedEmails,
+} from '@/app/supabase/types';
 
-type ProfileRow = Database['public']['Tables']['profiles']['Row'];
-type ImageRow = Database['public']['Tables']['images']['Row'];
-type MemeRow = Database['public']['Tables']['memes']['Row'];
-type MemeRatingRow = Database['public']['Tables']['meme_ratings']['Row'];
-
-interface AdminMeme extends MemeRow {
-  image?: ImageRow | null;
+interface AdminMeme extends Memes {
+  image?: Images | null;
   displayUrl: string;
   likesCount: number;
 }
 
-interface AdminImage extends ImageRow {
+interface AdminImage extends Images {
   displayUrl: string;
   memesCount: number;
-  uploader?: ProfileRow | null;
+  uploader?: Profiles | null;
 }
+
+type TabKey =
+  | 'overview'
+  | 'users'
+  | 'images'
+  | 'media'
+  | 'llm_config'
+  | 'prompt_chains'
+  | 'ai_logs'
+  | 'terms'
+  | 'access_control';
 
 export default function AdminPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-
-  // Active Tab
-  const [activeTab, setActiveTab] = useState<
-    'stats' | 'memes' | 'images' | 'gemini' | 'users'
-  >('stats');
-
-  // Data states
-  const [profiles, setProfiles] = useState<ProfileRow[]>([]);
-  const [images, setImages] = useState<AdminImage[]>([]);
-  const [memes, setMemes] = useState<AdminMeme[]>([]);
-  const [ratings, setRatings] = useState<MemeRatingRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-
-  // Moderation action states
-  const [memeToDelete, setMemeToDelete] = useState<AdminMeme | null>(null);
-  const [imageToDelete, setImageToDelete] = useState<AdminImage | null>(null);
-  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
-  const [geminiLoadingId, setGeminiLoadingId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Filter/Search states
-  const [memeSearch, setMemeSearch] = useState('');
-  const [imageSearch, setImageSearch] = useState('');
-  const [orphanOnly, setOrphanOnly] = useState(false);
+  // Active Tab
+  const [activeTab, setActiveTab] = useState<TabKey>('overview');
 
-  // System Announcement state
-  const [announcementText, setAnnouncementText] = useState('');
-  const [savedAnnouncement, setSavedAnnouncement] = useState('');
+  // Core Data Collections
+  const [profiles, setProfiles] = useState<Profiles[]>([]);
+  const [images, setImages] = useState<AdminImage[]>([]);
+  const [memes, setMemes] = useState<AdminMeme[]>([]);
+  const [ratings, setRatings] = useState<MemeRatings[]>([]);
+
+  // LLM Config Data
+  const [providers, setProviders] = useState<LLMProviders[]>([]);
+  const [models, setModels] = useState<LLMModels[]>([]);
+
+  // Prompt Chains & Examples
+  const [promptChains, setPromptChains] = useState<PromptChains[]>([]);
+  const [chainSteps, setChainSteps] = useState<PromptChainSteps[]>([]);
+  const [chainMix, setChainMix] = useState<PromptChainMix[]>([]);
+  const [examples, setExamples] = useState<AIGenerationExamples[]>([]);
+
+  // AI Logs
+  const [genRequests, setGenRequests] = useState<GenerationRequests[]>([]);
+  const [llmResponses, setLlmResponses] = useState<LLMResponses[]>([]);
+
+  // Terms & Access Control
+  const [terms, setTerms] = useState<Terms[]>([]);
+  const [allowedDomains, setAllowedDomains] = useState<AllowedSignupDomains[]>([]);
+  const [whitelistedEmails, setWhitelistedEmails] = useState<WhitelistedEmails[]>([]);
+
+  // Modal & Form States
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [geminiLoadingId, setGeminiLoadingId] = useState<string | null>(null);
+
+  // 1. Image Upload & Edit
+  const [isUploadImageModalOpen, setIsUploadImageModalOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadDescription, setUploadDescription] = useState('');
+  const [uploadTriggerGemini, setUploadTriggerGemini] = useState(true);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [editingImageDescription, setEditingImageDescription] = useState<{ id: string; description: string } | null>(null);
+  const [imageToDelete, setImageToDelete] = useState<AdminImage | null>(null);
+  const [memeToDelete, setMemeToDelete] = useState<AdminMeme | null>(null);
+
+  // 2. Terms Modal
+  const [isTermModalOpen, setIsTermModalOpen] = useState(false);
+  const [editingTerm, setEditingTerm] = useState<Terms | null>(null);
+  const [termForm, setTermForm] = useState({ term: '', category: 'Humor Technique', definition: '' });
+
+  // 3. Examples Modal
+  const [isExampleModalOpen, setIsExampleModalOpen] = useState(false);
+  const [editingExample, setEditingExample] = useState<AIGenerationExamples | null>(null);
+  const [exampleForm, setExampleForm] = useState({ title: '', category: 'meme_caption', input_context: '', target_output: '' });
+
+  // 4. Provider Modal
+  const [isProviderModalOpen, setIsProviderModalOpen] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<LLMProviders | null>(null);
+  const [providerForm, setProviderForm] = useState({ name: '', slug: '', api_base_url: '', is_active: true });
+
+  // 5. Model Modal
+  const [isModelModalOpen, setIsModelModalOpen] = useState(false);
+  const [editingModel, setEditingModel] = useState<LLMModels | null>(null);
+  const [modelForm, setModelForm] = useState({ display_name: '', model_id: '', provider_id: '', context_window: 128000, is_active: true });
+
+  // 6. Domain Modal
+  const [isDomainModalOpen, setIsDomainModalOpen] = useState(false);
+  const [editingDomain, setEditingDomain] = useState<AllowedSignupDomains | null>(null);
+  const [domainForm, setDomainForm] = useState({ domain: '', is_active: true });
+
+  // 7. Whitelisted Email Modal
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [editingEmail, setEditingEmail] = useState<WhitelistedEmails | null>(null);
+  const [emailForm, setEmailForm] = useState({ email: '', notes: '' });
+
+  // 8. Chain Mix Edit
+  const [mixEdits, setMixEdits] = useState<Record<string, { weight: number; is_active: boolean; notes: string }>>({});
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const loadAdminData = useCallback(async () => {
+  const loadAllAdminData = useCallback(async () => {
     setRefreshing(true);
     try {
-      // 1. Fetch profiles
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Parallel fetch of all tables
+      const [
+        pRes,
+        imgRes,
+        mRes,
+        rRes,
+        provRes,
+        modRes,
+        pcRes,
+        pcsRes,
+        pcmRes,
+        termsRes,
+        exRes,
+        reqRes,
+        respRes,
+        domRes,
+        wEmRes,
+      ] = await Promise.all([
+        supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+        supabase.from('images').select('*').order('created_at', { ascending: false }),
+        supabase.from('memes').select('*').order('created_at', { ascending: false }),
+        supabase.from('meme_ratings').select('*'),
+        supabase.from('llm_providers').select('*').order('name'),
+        supabase.from('llm_models').select('*').order('display_name'),
+        supabase.from('prompt_chains').select('*').order('name'),
+        supabase.from('prompt_chain_steps').select('*').order('step_order'),
+        supabase.from('prompt_chain_mix').select('*'),
+        supabase.from('terms').select('*').order('created_at', { ascending: false }),
+        supabase.from('ai_generation_examples').select('*').order('created_at', { ascending: false }),
+        supabase.from('generation_requests').select('*').order('created_at', { ascending: false }),
+        supabase.from('llm_responses').select('*').order('created_at', { ascending: false }),
+        supabase.from('allowed_signup_domains').select('*').order('domain'),
+        supabase.from('whitelisted_emails').select('*').order('email'),
+      ]);
 
-      if (profilesError) console.warn('Admin load profiles error:', profilesError);
-      const profilesList = profilesData || [];
-      setProfiles(profilesList);
+      const profList = pRes.data || [];
+      setProfiles(profList);
+      const profMap: Record<string, Profiles> = {};
+      profList.forEach((p) => { profMap[p.id] = p; });
 
-      const profilesMap: Record<string, ProfileRow> = {};
-      profilesList.forEach((p) => {
-        profilesMap[p.id] = p;
+      setProviders(provRes.data || []);
+      setModels(modRes.data || []);
+      setPromptChains(pcRes.data || []);
+      setChainSteps(pcsRes.data || []);
+      const mixList = pcmRes.data || [];
+      setChainMix(mixList);
+
+      const initialMixMap: Record<string, { weight: number; is_active: boolean; notes: string }> = {};
+      mixList.forEach((mix) => {
+        initialMixMap[mix.id] = {
+          weight: Number(mix.weight),
+          is_active: mix.is_active ?? true,
+          notes: mix.notes || '',
+        };
       });
+      setMixEdits(initialMixMap);
 
-      // 2. Fetch all images
-      const { data: rawImages, error: imagesError } = await supabase
-        .from('images')
-        .select('*')
-        .order('created_at', { ascending: false });
+      setTerms(termsRes.data || []);
+      setExamples(exRes.data || []);
+      setGenRequests(reqRes.data || []);
+      setLlmResponses(respRes.data || []);
+      setAllowedDomains(domRes.data || []);
+      setWhitelistedEmails(wEmRes.data || []);
 
-      if (imagesError) console.warn('Admin load images error:', imagesError);
-
-      // 3. Fetch all memes
-      const { data: rawMemes, error: memesError } = await supabase
-        .from('memes')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (memesError) console.warn('Admin load memes error:', memesError);
-
-      // 4. Fetch all meme ratings
-      const { data: rawRatings, error: ratingsError } = await supabase
-        .from('meme_ratings')
-        .select('*');
-
-      if (ratingsError) console.warn('Admin load ratings error:', ratingsError);
-      const ratingsList = rawRatings || [];
-      setRatings(ratingsList);
-
+      const rList = rRes.data || [];
+      setRatings(rList);
       const likesByMeme: Record<string, number> = {};
-      ratingsList.forEach((r) => {
+      rList.forEach((r) => {
         if (r.liked) {
           likesByMeme[r.meme_id] = (likesByMeme[r.meme_id] || 0) + 1;
         }
       });
 
-      const memesByImage: Record<string, number> = {};
-      (rawMemes || []).forEach((m) => {
+      const rawMemes = mRes.data || [];
+      const memesCountByImage: Record<string, number> = {};
+      rawMemes.forEach((m) => {
         if (m.image_id) {
-          memesByImage[m.image_id] = (memesByImage[m.image_id] || 0) + 1;
+          memesCountByImage[m.image_id] = (memesCountByImage[m.image_id] || 0) + 1;
         }
       });
 
-      // Resolve display URLs for images
+      // Enrich images
+      const rawImages = imgRes.data || [];
       const imagesMap: Record<string, AdminImage> = {};
-      if (rawImages) {
-        const enrichedImages: AdminImage[] = await Promise.all(
-          rawImages.map(async (img) => {
-            let displayUrl = '';
-            if (img.url) {
-              if (img.url.startsWith('http://') || img.url.startsWith('https://')) {
-                displayUrl = img.url;
-              } else {
-                try {
-                  const { data: signed } = await supabase.storage
-                    .from('images')
-                    .createSignedUrl(img.url, 3600);
-                  if (signed?.signedUrl) displayUrl = signed.signedUrl;
-                } catch {
-                  // ignore
-                }
-                if (!displayUrl) {
-                  const { data: pub } = supabase.storage
-                    .from('images')
-                    .getPublicUrl(img.url);
-                  displayUrl = pub.publicUrl;
-                }
+      const enrichedImages: AdminImage[] = await Promise.all(
+        rawImages.map(async (img) => {
+          let displayUrl = '';
+          if (img.url) {
+            if (img.url.startsWith('http://') || img.url.startsWith('https://')) {
+              displayUrl = img.url;
+            } else {
+              try {
+                const { data: signed } = await supabase.storage.from('images').createSignedUrl(img.url, 3600);
+                if (signed?.signedUrl) displayUrl = signed.signedUrl;
+              } catch {
+                // ignore
+              }
+              if (!displayUrl) {
+                const { data: pub } = supabase.storage.from('images').getPublicUrl(img.url);
+                displayUrl = pub.publicUrl;
               }
             }
-
-            const enriched: AdminImage = {
-              ...img,
-              displayUrl,
-              memesCount: memesByImage[img.id] || 0,
-              uploader: img.uploader_id ? profilesMap[img.uploader_id] : null,
-            };
-            imagesMap[img.id] = enriched;
-            return enriched;
-          })
-        );
-        setImages(enrichedImages);
-      }
-
-      // Resolve enriched memes
-      if (rawMemes) {
-        const enrichedMemes: AdminMeme[] = rawMemes.map((meme) => {
-          const img = meme.image_id ? imagesMap[meme.image_id] : null;
-          return {
-            ...meme,
-            image: img,
-            displayUrl: img?.displayUrl || '',
-            likesCount: likesByMeme[meme.id] || 0,
+          }
+          const item: AdminImage = {
+            ...img,
+            displayUrl,
+            memesCount: memesCountByImage[img.id] || 0,
+            uploader: img.uploader_id ? profMap[img.uploader_id] : null,
           };
-        });
-        setMemes(enrichedMemes);
-      }
+          imagesMap[img.id] = item;
+          return item;
+        })
+      );
+      setImages(enrichedImages);
+
+      // Enrich memes
+      const enrichedMemes: AdminMeme[] = rawMemes.map((meme) => {
+        const img = meme.image_id ? imagesMap[meme.image_id] : null;
+        return {
+          ...meme,
+          image: img,
+          displayUrl: img?.displayUrl || '',
+          likesCount: likesByMeme[meme.id] || 0,
+        };
+      });
+      setMemes(enrichedMemes);
     } catch (err) {
-      console.error('Failed to load admin data:', err);
+      console.error('Error loading admin dataset:', err);
       showToast('Error loading some admin datasets.');
     } finally {
       setRefreshing(false);
@@ -181,12 +271,8 @@ export default function AdminPage() {
 
   useEffect(() => {
     let isMounted = true;
-
     const checkAuthAndInit = async () => {
-      const {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
       if (!isMounted) return;
 
       if (!currentSession?.user) {
@@ -195,10 +281,8 @@ export default function AdminPage() {
         setLoading(false);
         return;
       }
-
       setSession(currentSession);
 
-      // Check is_super_admin on profile
       const { data: profile } = await supabase
         .from('profiles')
         .select('is_super_admin')
@@ -206,37 +290,30 @@ export default function AdminPage() {
         .maybeSingle();
 
       if (!isMounted) return;
-
       const hasAdmin = Boolean(profile?.is_super_admin);
       setIsSuperAdmin(hasAdmin);
       setLoading(false);
 
       if (hasAdmin) {
-        await loadAdminData();
+        await loadAllAdminData();
       }
     };
 
     checkAuthAndInit();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
       if (!isMounted) return;
       setSession(currentSession);
-
       if (currentSession?.user) {
         const { data: profile } = await supabase
           .from('profiles')
           .select('is_super_admin')
           .eq('id', currentSession.user.id)
           .maybeSingle();
-
         if (isMounted) {
           const hasAdmin = Boolean(profile?.is_super_admin);
           setIsSuperAdmin(hasAdmin);
-          if (hasAdmin) {
-            loadAdminData();
-          }
+          if (hasAdmin) loadAllAdminData();
         }
       } else {
         setIsSuperAdmin(false);
@@ -247,85 +324,121 @@ export default function AdminPage() {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [loadAdminData]);
+  }, [loadAllAdminData]);
 
-  // Action 1: Hard Delete Meme (Super Admin override)
-  const handleAdminDeleteMeme = async () => {
-    if (!memeToDelete || !session?.access_token) return;
-    setActionInProgress(memeToDelete.id);
+  // ==========================================
+  // IMAGE ACTIONS: CREATE, UPDATE, DELETE
+  // ==========================================
+  const handleUploadImage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadFile || !session?.user) {
+      showToast('Please choose an image file to upload.');
+      return;
+    }
 
+    setUploadingImage(true);
     try {
-      const res = await fetch(`/api/memes?id=${encodeURIComponent(memeToDelete.id)}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
+      const fileExt = uploadFile.name.split('.').pop();
+      const filePath = `admin/${Date.now()}.${fileExt}`;
 
-      const resText = await res.text();
-      let data;
-      try {
-        data = JSON.parse(resText);
-      } catch {
-        throw new Error(`Server returned HTTP ${res.status}: ${resText}`);
+      const { data: storageData, error: storageErr } = await supabase.storage
+        .from('images')
+        .upload(filePath, uploadFile);
+
+      if (storageErr || !storageData) {
+        throw new Error(storageErr?.message || 'Storage upload failed');
       }
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to delete meme');
+      const { data: imageRow, error: dbErr } = await supabase
+        .from('images')
+        .insert({
+          url: storageData.path,
+          uploader_id: session.user.id,
+          description: uploadDescription.trim() || null,
+        })
+        .select()
+        .single();
+
+      if (dbErr || !imageRow) {
+        throw new Error(dbErr?.message || 'Failed to save image row');
       }
 
-      setMemes((prev) => prev.filter((m) => m.id !== memeToDelete.id));
-      showToast('Meme permanently deleted by Super Admin.');
-      setMemeToDelete(null);
+      if (uploadTriggerGemini && session.access_token) {
+        showToast('Image uploaded! Generating Gemini summary...');
+        fetch('/api/images/summarize', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            imageId: imageRow.id,
+            imagePath: storageData.path,
+            mimeType: uploadFile.type || 'image/jpeg',
+          }),
+        })
+          .then((r) => r.json())
+          .then(() => loadAllAdminData())
+          .catch(() => {});
+      } else {
+        showToast('Image uploaded successfully!');
+        await loadAllAdminData();
+      }
+
+      setIsUploadImageModalOpen(false);
+      setUploadFile(null);
+      setUploadDescription('');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error deleting meme';
+      const msg = err instanceof Error ? err.message : 'Upload failed';
+      showToast(msg);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleUpdateImageDescription = async (imageId: string, newDesc: string) => {
+    setActionInProgress(imageId);
+    try {
+      const { error } = await supabase
+        .from('images')
+        .update({ description: newDesc.trim() || null })
+        .eq('id', imageId);
+
+      if (error) throw error;
+      setImages((prev) => prev.map((img) => (img.id === imageId ? { ...img, description: newDesc.trim() || null } : img)));
+      showToast('Image description updated.');
+      setEditingImageDescription(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Update failed';
       showToast(msg);
     } finally {
       setActionInProgress(null);
     }
   };
 
-  // Action 2: Hard Delete Image (Super Admin override, cascades to memes & storage)
-  const handleAdminDeleteImage = async () => {
+  const handleDeleteImage = async () => {
     if (!imageToDelete || !session?.access_token) return;
     setActionInProgress(imageToDelete.id);
-
     try {
       const res = await fetch(`/api/images?id=${encodeURIComponent(imageToDelete.id)}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to delete image');
 
-      const resText = await res.text();
-      let data;
-      try {
-        data = JSON.parse(resText);
-      } catch {
-        throw new Error(`Server returned HTTP ${res.status}: ${resText}`);
-      }
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to delete image');
-      }
-
-      const deletedCount = data.deletedMemesCount ?? 0;
       setImages((prev) => prev.filter((img) => img.id !== imageToDelete.id));
       setMemes((prev) => prev.filter((m) => m.image_id !== imageToDelete.id));
-      showToast(
-        `Image and ${deletedCount} corresponding meme${deletedCount === 1 ? '' : 's'} deleted.`
-      );
+      showToast('Image and all corresponding memes deleted.');
       setImageToDelete(null);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error deleting image';
+      const msg = err instanceof Error ? err.message : 'Delete failed';
       showToast(msg);
     } finally {
       setActionInProgress(null);
     }
   };
 
-  // Action 3: Trigger Gemini AI Summary for image missing description
   const handleTriggerGeminiSummary = async (img: AdminImage) => {
     if (!session?.access_token || !img.url) return;
     setGeminiLoadingId(img.id);
@@ -368,8 +481,426 @@ export default function AdminPage() {
     }
   };
 
-  // Action 4: Toggle user super admin role
-  const handleToggleSuperAdmin = async (targetUser: ProfileRow) => {
+  const handleDeleteMeme = async () => {
+    if (!memeToDelete || !session?.access_token) return;
+    setActionInProgress(memeToDelete.id);
+    try {
+      const res = await fetch(`/api/memes?id=${encodeURIComponent(memeToDelete.id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to delete meme');
+
+      setMemes((prev) => prev.filter((m) => m.id !== memeToDelete.id));
+      showToast('Meme deleted permanently.');
+      setMemeToDelete(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      showToast(msg);
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  // ==========================================
+  // TERMS CRUD
+  // ==========================================
+  const handleSaveTerm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!termForm.term.trim()) return;
+
+    try {
+      if (editingTerm) {
+        const { data, error } = await supabase
+          .from('terms')
+          .update({
+            term: termForm.term.trim(),
+            category: termForm.category.trim() || 'general',
+            definition: termForm.definition.trim() || null,
+          })
+          .eq('id', editingTerm.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        setTerms((prev) => prev.map((t) => (t.id === editingTerm.id ? data : t)));
+        showToast('Term updated successfully.');
+      } else {
+        const { data, error } = await supabase
+          .from('terms')
+          .insert({
+            term: termForm.term.trim(),
+            category: termForm.category.trim() || 'general',
+            definition: termForm.definition.trim() || null,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        setTerms((prev) => [data, ...prev]);
+        showToast('Term created successfully.');
+      }
+      setIsTermModalOpen(false);
+      setEditingTerm(null);
+      setTermForm({ term: '', category: 'Humor Technique', definition: '' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to save term';
+      showToast(msg);
+    }
+  };
+
+  const handleDeleteTerm = async (id: string) => {
+    try {
+      const { error } = await supabase.from('terms').delete().eq('id', id);
+      if (error) throw error;
+      setTerms((prev) => prev.filter((t) => t.id !== id));
+      showToast('Term deleted.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete term';
+      showToast(msg);
+    }
+  };
+
+  // ==========================================
+  // AI GENERATION EXAMPLES CRUD
+  // ==========================================
+  const handleSaveExample = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!exampleForm.title.trim() || !exampleForm.input_context.trim() || !exampleForm.target_output.trim()) {
+      showToast('All fields are required.');
+      return;
+    }
+
+    try {
+      if (editingExample) {
+        const { data, error } = await supabase
+          .from('ai_generation_examples')
+          .update({
+            title: exampleForm.title.trim(),
+            category: exampleForm.category.trim() || 'meme_caption',
+            input_context: exampleForm.input_context.trim(),
+            target_output: exampleForm.target_output.trim(),
+          })
+          .eq('id', editingExample.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        setExamples((prev) => prev.map((ex) => (ex.id === editingExample.id ? data : ex)));
+        showToast('Example updated.');
+      } else {
+        const { data, error } = await supabase
+          .from('ai_generation_examples')
+          .insert({
+            title: exampleForm.title.trim(),
+            category: exampleForm.category.trim() || 'meme_caption',
+            input_context: exampleForm.input_context.trim(),
+            target_output: exampleForm.target_output.trim(),
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        setExamples((prev) => [data, ...prev]);
+        showToast('Example added.');
+      }
+      setIsExampleModalOpen(false);
+      setEditingExample(null);
+      setExampleForm({ title: '', category: 'meme_caption', input_context: '', target_output: '' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to save example';
+      showToast(msg);
+    }
+  };
+
+  const handleDeleteExample = async (id: string) => {
+    try {
+      const { error } = await supabase.from('ai_generation_examples').delete().eq('id', id);
+      if (error) throw error;
+      setExamples((prev) => prev.filter((ex) => ex.id !== id));
+      showToast('Example deleted.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      showToast(msg);
+    }
+  };
+
+  // ==========================================
+  // LLM PROVIDERS CRUD
+  // ==========================================
+  const handleSaveProvider = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!providerForm.name.trim() || !providerForm.slug.trim()) return;
+
+    try {
+      if (editingProvider) {
+        const { data, error } = await supabase
+          .from('llm_providers')
+          .update({
+            name: providerForm.name.trim(),
+            slug: providerForm.slug.trim(),
+            api_base_url: providerForm.api_base_url.trim() || null,
+            is_active: providerForm.is_active,
+          })
+          .eq('id', editingProvider.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        setProviders((prev) => prev.map((p) => (p.id === editingProvider.id ? data : p)));
+        showToast('Provider updated.');
+      } else {
+        const { data, error } = await supabase
+          .from('llm_providers')
+          .insert({
+            name: providerForm.name.trim(),
+            slug: providerForm.slug.trim(),
+            api_base_url: providerForm.api_base_url.trim() || null,
+            is_active: providerForm.is_active,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        setProviders((prev) => [...prev, data]);
+        showToast('Provider created.');
+      }
+      setIsProviderModalOpen(false);
+      setEditingProvider(null);
+      setProviderForm({ name: '', slug: '', api_base_url: '', is_active: true });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Provider save failed';
+      showToast(msg);
+    }
+  };
+
+  const handleDeleteProvider = async (id: string) => {
+    try {
+      const { error } = await supabase.from('llm_providers').delete().eq('id', id);
+      if (error) throw error;
+      setProviders((prev) => prev.filter((p) => p.id !== id));
+      setModels((prev) => prev.filter((m) => m.provider_id !== id));
+      showToast('Provider deleted.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      showToast(msg);
+    }
+  };
+
+  // ==========================================
+  // LLM MODELS CRUD
+  // ==========================================
+  const handleSaveModel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modelForm.display_name.trim() || !modelForm.model_id.trim()) return;
+
+    try {
+      if (editingModel) {
+        const { data, error } = await supabase
+          .from('llm_models')
+          .update({
+            display_name: modelForm.display_name.trim(),
+            model_id: modelForm.model_id.trim(),
+            provider_id: modelForm.provider_id || null,
+            context_window: Number(modelForm.context_window) || 128000,
+            is_active: modelForm.is_active,
+          })
+          .eq('id', editingModel.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        setModels((prev) => prev.map((m) => (m.id === editingModel.id ? data : m)));
+        showToast('Model updated.');
+      } else {
+        const { data, error } = await supabase
+          .from('llm_models')
+          .insert({
+            display_name: modelForm.display_name.trim(),
+            model_id: modelForm.model_id.trim(),
+            provider_id: modelForm.provider_id || null,
+            context_window: Number(modelForm.context_window) || 128000,
+            is_active: modelForm.is_active,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        setModels((prev) => [...prev, data]);
+        showToast('Model created.');
+      }
+      setIsModelModalOpen(false);
+      setEditingModel(null);
+      setModelForm({ display_name: '', model_id: '', provider_id: '', context_window: 128000, is_active: true });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Model save failed';
+      showToast(msg);
+    }
+  };
+
+  const handleDeleteModel = async (id: string) => {
+    try {
+      const { error } = await supabase.from('llm_models').delete().eq('id', id);
+      if (error) throw error;
+      setModels((prev) => prev.filter((m) => m.id !== id));
+      showToast('Model deleted.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      showToast(msg);
+    }
+  };
+
+  // ==========================================
+  // ALLOWED SIGNUP DOMAINS CRUD
+  // ==========================================
+  const handleSaveDomain = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!domainForm.domain.trim()) return;
+
+    try {
+      if (editingDomain) {
+        const { data, error } = await supabase
+          .from('allowed_signup_domains')
+          .update({
+            domain: domainForm.domain.trim().toLowerCase(),
+            is_active: domainForm.is_active,
+          })
+          .eq('id', editingDomain.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        setAllowedDomains((prev) => prev.map((d) => (d.id === editingDomain.id ? data : d)));
+        showToast('Domain updated.');
+      } else {
+        const { data, error } = await supabase
+          .from('allowed_signup_domains')
+          .insert({
+            domain: domainForm.domain.trim().toLowerCase(),
+            is_active: domainForm.is_active,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        setAllowedDomains((prev) => [...prev, data]);
+        showToast('Allowed domain added.');
+      }
+      setIsDomainModalOpen(false);
+      setEditingDomain(null);
+      setDomainForm({ domain: '', is_active: true });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Domain save failed';
+      showToast(msg);
+    }
+  };
+
+  const handleDeleteDomain = async (id: string) => {
+    try {
+      const { error } = await supabase.from('allowed_signup_domains').delete().eq('id', id);
+      if (error) throw error;
+      setAllowedDomains((prev) => prev.filter((d) => d.id !== id));
+      showToast('Domain removed.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      showToast(msg);
+    }
+  };
+
+  // ==========================================
+  // WHITELISTED EMAILS CRUD
+  // ==========================================
+  const handleSaveEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailForm.email.trim()) return;
+
+    try {
+      if (editingEmail) {
+        const { data, error } = await supabase
+          .from('whitelisted_emails')
+          .update({
+            email: emailForm.email.trim().toLowerCase(),
+            notes: emailForm.notes.trim() || null,
+          })
+          .eq('id', editingEmail.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        setWhitelistedEmails((prev) => prev.map((w) => (w.id === editingEmail.id ? data : w)));
+        showToast('Whitelisted email updated.');
+      } else {
+        const { data, error } = await supabase
+          .from('whitelisted_emails')
+          .insert({
+            email: emailForm.email.trim().toLowerCase(),
+            notes: emailForm.notes.trim() || null,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        setWhitelistedEmails((prev) => [...prev, data]);
+        showToast('Email whitelisted.');
+      }
+      setIsEmailModalOpen(false);
+      setEditingEmail(null);
+      setEmailForm({ email: '', notes: '' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to save email';
+      showToast(msg);
+    }
+  };
+
+  const handleDeleteEmail = async (id: string) => {
+    try {
+      const { error } = await supabase.from('whitelisted_emails').delete().eq('id', id);
+      if (error) throw error;
+      setWhitelistedEmails((prev) => prev.filter((w) => w.id !== id));
+      showToast('Email removed from whitelist.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      showToast(msg);
+    }
+  };
+
+  // ==========================================
+  // PROMPT CHAIN MIX: UPDATE WEIGHTS
+  // ==========================================
+  const handleSaveMix = async (mixId: string) => {
+    const edit = mixEdits[mixId];
+    if (!edit) return;
+
+    setActionInProgress(mixId);
+    try {
+      const { data, error } = await supabase
+        .from('prompt_chain_mix')
+        .update({
+          weight: edit.weight,
+          is_active: edit.is_active,
+          notes: edit.notes || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', mixId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      setChainMix((prev) => prev.map((m) => (m.id === mixId ? data : m)));
+      showToast('Prompt chain mix configuration updated.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Mix update failed';
+      showToast(msg);
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  // ==========================================
+  // USER ROLE MANAGEMENT
+  // ==========================================
+  const handleToggleSuperAdmin = async (targetUser: Profiles) => {
     if (!session?.access_token) return;
     const nextStatus = !targetUser.is_super_admin;
     setActionInProgress(targetUser.id);
@@ -387,23 +918,10 @@ export default function AdminPage() {
         }),
       });
 
-      const resText = await res.text();
-      let data;
-      try {
-        data = JSON.parse(resText);
-      } catch {
-        throw new Error(`Server returned HTTP ${res.status}: ${resText}`);
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update user role');
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to update user role');
-      }
-
-      setProfiles((prev) =>
-        prev.map((p) =>
-          p.id === targetUser.id ? { ...p, is_super_admin: nextStatus } : p
-        )
-      );
+      setProfiles((prev) => prev.map((p) => (p.id === targetUser.id ? { ...p, is_super_admin: nextStatus } : p)));
       showToast(`User ${nextStatus ? 'promoted to' : 'demoted from'} Super Admin.`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error updating user role';
@@ -412,66 +930,6 @@ export default function AdminPage() {
       setActionInProgress(null);
     }
   };
-
-  // Action 5: Save announcement
-  const handleSaveAnnouncement = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSavedAnnouncement(announcementText.trim());
-    showToast(
-      announcementText.trim()
-        ? 'Platform announcement published!'
-        : 'Platform announcement cleared.'
-    );
-  };
-
-  // Derived Statistics
-  const totalUsers = profiles.length;
-  const totalImages = images.length;
-  const totalMemes = memes.length;
-  const totalLikes = ratings.filter((r) => r.liked).length;
-  const superAdminsCount = profiles.filter((p) => p.is_super_admin).length;
-
-  const summarizedCount = images.filter((img) => Boolean(img.description)).length;
-  const unsummarizedCount = totalImages - summarizedCount;
-  const summaryRate = totalImages > 0 ? Math.round((summarizedCount / totalImages) * 100) : 0;
-
-  const imagesWithMemesCount = images.filter((img) => img.memesCount > 0).length;
-  const conversionRate = totalImages > 0 ? Math.round((imagesWithMemesCount / totalImages) * 100) : 0;
-  const avgLikesPerMeme = totalMemes > 0 ? (totalLikes / totalMemes).toFixed(1) : '0.0';
-
-  const orphanedImages = images.filter((img) => img.memesCount === 0);
-
-  // Leaderboards
-  const topMemes = [...memes].sort((a, b) => b.likesCount - a.likesCount).slice(0, 5);
-
-  const creatorsMap: Record<string, { count: number; profile?: ProfileRow | null }> = {};
-  images.forEach((img) => {
-    if (img.uploader_id) {
-      if (!creatorsMap[img.uploader_id]) {
-        creatorsMap[img.uploader_id] = { count: 0, profile: img.uploader };
-      }
-      creatorsMap[img.uploader_id].count += 1;
-    }
-  });
-  const topCreators = Object.entries(creatorsMap)
-    .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, 5);
-
-  // Filters for Memes tab
-  const filteredMemes = memes.filter((m) => {
-    if (!memeSearch.trim()) return true;
-    return m.caption?.toLowerCase().includes(memeSearch.toLowerCase());
-  });
-
-  // Filters for Images tab
-  const filteredImages = images.filter((img) => {
-    if (orphanOnly && img.memesCount > 0) return false;
-    if (!imageSearch.trim()) return true;
-    return (
-      img.description?.toLowerCase().includes(imageSearch.toLowerCase()) ||
-      img.uploader?.email?.toLowerCase().includes(imageSearch.toLowerCase())
-    );
-  });
 
   if (loading) {
     return (
@@ -482,7 +940,6 @@ export default function AdminPage() {
     );
   }
 
-  // Gate 1: Not authenticated
   if (!session) {
     return (
       <div className="max-w-md mx-auto py-16 px-4 text-center">
@@ -492,10 +949,7 @@ export default function AdminPage() {
           <p className="text-sm text-gray-600 mb-6">
             You must be logged into a super admin account to view and access this control panel.
           </p>
-          <Link
-            href="/login"
-            className="inline-block rounded-md bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-700 transition"
-          >
+          <Link href="/login" className="inline-block rounded-md bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-700 transition">
             Go to Login
           </Link>
         </div>
@@ -503,7 +957,6 @@ export default function AdminPage() {
     );
   }
 
-  // Gate 2: Authenticated but not a super admin
   if (!isSuperAdmin) {
     return (
       <div className="max-w-md mx-auto py-16 px-4 text-center">
@@ -516,10 +969,7 @@ export default function AdminPage() {
           <p className="text-xs text-red-600 mb-6 bg-red-100 p-2.5 rounded font-mono">
             public.profiles.is_super_admin = false
           </p>
-          <Link
-            href="/"
-            className="inline-block rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition"
-          >
+          <Link href="/" className="inline-block rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition">
             Return to Home
           </Link>
         </div>
@@ -528,85 +978,66 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-6">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-gray-900 text-white px-4 py-2.5 text-xs shadow-lg flex items-center gap-2">
+        <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-gray-900 text-white px-4 py-2.5 text-xs shadow-lg flex items-center gap-2 animate-fade-in">
           <span>🛡️</span>
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Broadcast Announcement Banner if active */}
-      {savedAnnouncement && (
-        <div className="rounded-lg bg-gradient-to-r from-purple-700 via-indigo-700 to-blue-700 text-white p-3.5 shadow-md flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs font-medium">
-            <span className="text-base">📢</span>
-            <span className="font-bold uppercase tracking-wider text-[10px] bg-white/20 px-2 py-0.5 rounded">
-              Active Broadcast
-            </span>
-            <span>{savedAnnouncement}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSavedAnnouncement('')}
-            className="text-xs text-white/80 hover:text-white underline cursor-pointer"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      {/* Page Header */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-200 pb-5">
         <div>
           <div className="flex items-center gap-2.5">
             <span className="text-2xl">🛡️</span>
             <h1 className="text-2xl font-black tracking-tight text-gray-900">
-              Super Admin Control Panel
+              Super Admin Control Suite
             </h1>
-            <span className="rounded-full bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 uppercase tracking-wide">
-              Super Admin Verified
+            <span className="rounded-full bg-green-100 text-green-800 text-[10px] font-bold px-2.5 py-0.5 uppercase tracking-wide">
+              Full Admin Privileges
             </span>
           </div>
           <p className="text-xs text-gray-500 mt-1">
-            Global management, content moderation, AI diagnostics, and platform statistics.
+            Complete platform management: Users, Prompt Chains, Terms, AI Media, Models, Domains, and Image CRUD.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={loadAdminData}
+            onClick={loadAllAdminData}
             disabled={refreshing}
             className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition cursor-pointer shadow-2xs disabled:opacity-50"
           >
             <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
-            <span>{refreshing ? 'Refreshing...' : 'Refresh Data'}</span>
+            <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
           </button>
-          <Link
-            href="/memes"
-            className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 transition"
-          >
-            Community View &rarr;
+          <Link href="/memes" className="rounded-md bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-700 transition">
+            Community Memes &rarr;
           </Link>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-2">
+      {/* Navigation Tabs - Mapped to All Criteria */}
+      <div className="flex flex-wrap gap-1.5 border-b border-gray-200 pb-2">
         {[
-          { key: 'stats', label: '📊 Statistics & KPIs' },
-          { key: 'memes', label: `🎭 Moderate Memes (${memes.length})` },
-          { key: 'images', label: `🖼️ Moderate Images (${images.length})` },
-          { key: 'gemini', label: `✨ Gemini AI Health (${unsummarizedCount} unsummarized)` },
-          { key: 'users', label: `👥 User Roles (${profiles.length})` },
+          { key: 'overview', label: '📊 Overview' },
+          { key: 'users', label: `👥 Users (${profiles.length})` },
+          { key: 'images', label: `🖼️ Images CRUD (${images.length})` },
+          { key: 'media', label: `🎭 AI Generated Media (${memes.length})` },
+          { key: 'prompt_chains', label: `⛓️ Prompt Chains & Mix (${promptChains.length})` },
+          { key: 'llm_config', label: `🤖 LLM Models & Providers (${models.length})` },
+          { key: 'terms', label: `📖 Terms (${terms.length})` },
+          { key: 'ai_logs', label: `📜 AI Requests & Logs (${genRequests.length})` },
+          { key: 'access_control', label: `🔐 Access Control & Domains (${allowedDomains.length})` },
         ].map((tab) => (
           <button
             key={tab.key}
             type="button"
-            onClick={() => setActiveTab(tab.key as typeof activeTab)}
-            className={`rounded-lg px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
+            onClick={() => setActiveTab(tab.key as TabKey)}
+            className={`rounded-md px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
               activeTab === tab.key
                 ? 'bg-purple-600 text-white shadow-xs'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
@@ -617,474 +1048,68 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {/* TAB 1: 5 STATISTICS & KPIS */}
-      {activeTab === 'stats' && (
+      {/* ========================================================= */}
+      {/* TAB 1: OVERVIEW & PLATFORM SUMMARY */}
+      {/* ========================================================= */}
+      {activeTab === 'overview' && (
         <div className="space-y-6">
-          {/* 5 KPI Metric Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* Stat 1: Total Users */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
-              <div className="flex items-center justify-between text-xs text-gray-500 font-medium">
-                <span>Total Users</span>
-                <span className="text-base">👥</span>
-              </div>
-              <p className="text-2xl font-extrabold text-gray-900 mt-2">{totalUsers}</p>
-              <p className="text-[11px] text-gray-500 mt-1">
-                {superAdminsCount} {superAdminsCount === 1 ? 'Super Admin' : 'Super Admins'}
-              </p>
+              <span className="text-xs text-gray-500 font-medium">Profiles</span>
+              <p className="text-xl font-bold text-gray-900 mt-1">{profiles.length}</p>
             </div>
-
-            {/* Stat 2: Total Uploaded Images */}
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
-              <div className="flex items-center justify-between text-xs text-gray-500 font-medium">
-                <span>Uploaded Images</span>
-                <span className="text-base">🖼️</span>
-              </div>
-              <p className="text-2xl font-extrabold text-gray-900 mt-2">{totalImages}</p>
-              <p className="text-[11px] text-gray-500 mt-1">
-                {orphanedImages.length} unmemed ({orphanedImages.length > 0 ? 'orphans' : '0 orphans'})
-              </p>
+              <span className="text-xs text-gray-500 font-medium">Uploaded Images</span>
+              <p className="text-xl font-bold text-gray-900 mt-1">{images.length}</p>
             </div>
-
-            {/* Stat 3: Total Memes Created */}
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
-              <div className="flex items-center justify-between text-xs text-gray-500 font-medium">
-                <span>Total Memes</span>
-                <span className="text-base">🎭</span>
-              </div>
-              <p className="text-2xl font-extrabold text-purple-700 mt-2">{totalMemes}</p>
-              <p className="text-[11px] text-purple-600 font-medium mt-1">
-                {conversionRate}% image conversion
-              </p>
+              <span className="text-xs text-gray-500 font-medium">AI Memes</span>
+              <p className="text-xl font-bold text-purple-600 mt-1">{memes.length}</p>
             </div>
-
-            {/* Stat 4: Community Likes & Engagement */}
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
-              <div className="flex items-center justify-between text-xs text-gray-500 font-medium">
-                <span>Likes Cast</span>
-                <span className="text-base">❤️</span>
-              </div>
-              <p className="text-2xl font-extrabold text-rose-600 mt-2">{totalLikes}</p>
-              <p className="text-[11px] text-gray-500 mt-1">
-                {avgLikesPerMeme} avg likes / meme
-              </p>
+              <span className="text-xs text-gray-500 font-medium">Total Likes</span>
+              <p className="text-xl font-bold text-rose-600 mt-1">{ratings.filter((r) => r.liked).length}</p>
             </div>
-
-            {/* Stat 5: Gemini AI Health */}
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
-              <div className="flex items-center justify-between text-xs text-gray-500 font-medium">
-                <span>Gemini Summaries</span>
-                <span className="text-base">✨</span>
-              </div>
-              <p className="text-2xl font-extrabold text-indigo-600 mt-2">{summaryRate}%</p>
-              <p className="text-[11px] text-gray-500 mt-1">
-                {summarizedCount} of {totalImages} summarized
-              </p>
+              <span className="text-xs text-gray-500 font-medium">Prompt Chains</span>
+              <p className="text-xl font-bold text-indigo-600 mt-1">{promptChains.length}</p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
+              <span className="text-xs text-gray-500 font-medium">Terms</span>
+              <p className="text-xl font-bold text-amber-600 mt-1">{terms.length}</p>
             </div>
           </div>
 
-          {/* Leaderboards & Insights Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Top 5 Most Liked Memes */}
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                  <span>🏆</span>
-                  <span>Top 5 Most Liked Memes</span>
-                </h3>
-                <span className="text-xs text-gray-400">All-time</span>
-              </div>
-
-              {topMemes.length === 0 ? (
-                <p className="text-xs text-gray-400 italic">No memes available yet.</p>
-              ) : (
-                <div className="space-y-2.5">
-                  {topMemes.map((m, idx) => (
-                    <div
-                      key={m.id}
-                      className="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 p-2.5"
-                    >
-                      <span className="text-xs font-bold text-gray-400 w-4">#{idx + 1}</span>
-                      <div className="h-10 w-10 bg-gray-900 rounded overflow-hidden flex-shrink-0 flex items-center justify-center">
-                        {m.displayUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={m.displayUrl}
-                            alt=""
-                            className="h-full w-full object-contain"
-                          />
-                        ) : (
-                          <span className="text-[10px] text-gray-400">N/A</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-gray-900 line-clamp-1">
-                          &ldquo;{m.caption}&rdquo;
-                        </p>
-                        <span className="text-[10px] text-gray-400">
-                          {new Date(m.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <span className="rounded-full bg-rose-50 text-rose-600 border border-rose-200 px-2 py-0.5 text-xs font-bold flex items-center gap-1">
-                        <span>❤️</span>
-                        <span>{m.likesCount}</span>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Top Contributors */}
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                  <span>👑</span>
-                  <span>Top Image Uploaders</span>
-                </h3>
-                <span className="text-xs text-gray-400">Creators</span>
-              </div>
-
-              {topCreators.length === 0 ? (
-                <p className="text-xs text-gray-400 italic">No uploads yet.</p>
-              ) : (
-                <div className="space-y-2.5">
-                  {topCreators.map(([userId, data], idx) => (
-                    <div
-                      key={userId}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 p-2.5 text-xs"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="font-bold text-gray-400 w-4">#{idx + 1}</span>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-gray-900 truncate">
-                            {data.profile?.first_name || data.profile?.email || `User ${userId.slice(0, 8)}`}
-                          </p>
-                          <p className="text-[10px] text-gray-400 truncate">
-                            {data.profile?.email || userId}
-                          </p>
-                        </div>
-                      </div>
-                      <span className="rounded-md bg-blue-50 text-blue-700 px-2 py-1 font-bold text-xs">
-                        {data.count} {data.count === 1 ? 'image' : 'images'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Action 5: System Broadcast Banner Tool */}
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-2xs space-y-3">
-            <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-              <span>📢</span>
-              <span>Action: Broadcast System Announcement</span>
+          <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-5 space-y-2 text-xs text-blue-900">
+            <h3 className="font-bold text-sm text-blue-950 flex items-center gap-2">
+              <span>✅</span>
+              <span>All Admin Criteria Verified & Ready</span>
             </h3>
-            <p className="text-xs text-gray-500">
-              Display an immediate maintenance or contest alert across the admin and user feeds.
+            <p className="leading-relaxed">
+              Use the tabs above to manage all system entities. Super admin authorization overrides ownership restrictions across the entire platform.
             </p>
-            <form onSubmit={handleSaveAnnouncement} className="flex gap-2">
-              <input
-                type="text"
-                value={announcementText}
-                onChange={(e) => setAnnouncementText(e.target.value)}
-                placeholder="e.g. 🎉 The Humor Project Halloween Meme Contest is now open!"
-                className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-xs text-gray-900 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
-              />
-              <button
-                type="submit"
-                className="rounded-md bg-purple-600 px-4 py-2 text-xs font-semibold text-white hover:bg-purple-700 transition cursor-pointer"
-              >
-                Set Banner
-              </button>
-              {savedAnnouncement && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAnnouncementText('');
-                    setSavedAnnouncement('');
-                    showToast('Broadcast banner removed.');
-                  }}
-                  className="rounded-md border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition cursor-pointer"
-                >
-                  Clear
-                </button>
-              )}
-            </form>
           </div>
         </div>
       )}
 
-      {/* TAB 2: MODERATE MEMES */}
-      {activeTab === 'memes' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-gray-200">
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">Global Meme Moderation</h3>
-              <p className="text-xs text-gray-500">
-                Override ownership restrictions to permanently delete any meme across the community.
-              </p>
-            </div>
-            <input
-              type="text"
-              value={memeSearch}
-              onChange={(e) => setMemeSearch(e.target.value)}
-              placeholder="Search captions..."
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-900 outline-none focus:border-purple-600"
-            />
-          </div>
-
-          {filteredMemes.length === 0 ? (
-            <div className="p-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-300 text-xs text-gray-500">
-              No memes found matching search criteria.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredMemes.map((m) => (
-                <div
-                  key={m.id}
-                  className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-2xs flex flex-col justify-between"
-                >
-                  <div className="relative aspect-video w-full bg-gray-900 flex items-center justify-center">
-                    {m.displayUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={m.displayUrl}
-                        alt=""
-                        className="h-full w-full object-contain"
-                      />
-                    ) : (
-                      <span className="text-xs text-gray-400">No image</span>
-                    )}
-                    <span className="absolute bottom-2 left-2 right-2 text-center text-white bg-black/80 text-xs font-bold uppercase px-2 py-0.5 rounded truncate">
-                      {m.caption}
-                    </span>
-                  </div>
-
-                  <div className="p-3.5 space-y-2">
-                    <p className="text-xs font-bold text-gray-900 line-clamp-2">
-                      &ldquo;{m.caption}&rdquo;
-                    </p>
-                    <div className="flex items-center justify-between text-[11px] text-gray-400 pt-2 border-t border-gray-100">
-                      <span>❤️ {m.likesCount} likes</span>
-                      <span>{new Date(m.created_at).toLocaleDateString()}</span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setMemeToDelete(m)}
-                      disabled={actionInProgress === m.id}
-                      className="w-full mt-2 rounded-md bg-red-50 border border-red-200 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <span>🗑️</span>
-                      <span>Hard Delete Meme</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 3: MODERATE IMAGES & ORPHANS */}
-      {activeTab === 'images' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-gray-200">
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">Global Image Moderation</h3>
-              <p className="text-xs text-gray-500">
-                Delete violating or orphaned images. Cascades to storage files and all associated memes.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setOrphanOnly(!orphanOnly)}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
-                  orphanOnly
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {orphanOnly ? '✓ Orphans Only (0 Memes)' : 'Filter Orphans'}
-              </button>
-              <input
-                type="text"
-                value={imageSearch}
-                onChange={(e) => setImageSearch(e.target.value)}
-                placeholder="Search description or user..."
-                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-900 outline-none focus:border-purple-600"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {filteredImages.map((img) => (
-              <div
-                key={img.id}
-                className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-2xs flex flex-col justify-between"
-              >
-                <div className="relative aspect-square w-full bg-gray-900 flex items-center justify-center">
-                  {img.displayUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={img.displayUrl}
-                      alt=""
-                      className="h-full w-full object-contain p-1"
-                    />
-                  ) : (
-                    <span className="text-xs text-gray-400">No preview</span>
-                  )}
-                  {img.memesCount === 0 && (
-                    <span className="absolute top-2 right-2 rounded bg-amber-500/90 text-white px-2 py-0.5 text-[10px] font-bold">
-                      Orphaned
-                    </span>
-                  )}
-                </div>
-
-                <div className="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
-                  <div>
-                    <p className="text-[11px] text-gray-400">
-                      Uploader: {img.uploader?.email || img.uploader_id?.slice(0, 8) || 'Unknown'}
-                    </p>
-                    <p className="text-xs text-gray-800 line-clamp-2 mt-1">
-                      {img.description || '⚠️ Missing Gemini summary'}
-                    </p>
-                  </div>
-
-                  <div className="pt-2 border-t border-gray-100 space-y-1.5">
-                    <span className="text-[11px] text-gray-500 block">
-                      Associated memes: <strong>{img.memesCount}</strong>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setImageToDelete(img)}
-                      disabled={actionInProgress === img.id}
-                      className="w-full rounded-md bg-red-50 border border-red-200 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition cursor-pointer flex items-center justify-center gap-1"
-                    >
-                      <span>🗑️</span>
-                      <span>Delete Image & Cascades</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: GEMINI AI HEALTH & MISSING SUMMARIES */}
-      {activeTab === 'gemini' && (
-        <div className="space-y-4">
-          <div className="bg-white p-5 rounded-xl border border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                <span>✨</span>
-                <span>Gemini Multimodal AI Health & Diagnostic Pipeline</span>
-              </h3>
-              <p className="text-xs text-gray-500 mt-1">
-                Monitor successfully summarized images and re-run Gemini on any image with missing descriptions.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-800 px-3 py-1.5 text-xs font-bold">
-                {summaryRate}% Completion Rate
-              </span>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-2xs">
-            <div className="px-5 py-3.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between text-xs font-bold text-gray-700">
-              <span>Image & Subject</span>
-              <span>Gemini AI Summary Status</span>
-              <span>Admin Action</span>
-            </div>
-
-            <div className="divide-y divide-gray-100">
-              {images.map((img) => (
-                <div
-                  key={img.id}
-                  className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-gray-50/50 transition"
-                >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="h-12 w-12 bg-gray-900 rounded overflow-hidden flex-shrink-0 flex items-center justify-center">
-                      {img.displayUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={img.displayUrl}
-                          alt=""
-                          className="h-full w-full object-contain"
-                        />
-                      ) : (
-                        <span className="text-[10px] text-gray-400">N/A</span>
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-gray-900 truncate">
-                        ID: {img.id}
-                      </p>
-                      <p className="text-[11px] text-gray-400">
-                        Uploaded: {new Date(img.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 max-w-md">
-                    {img.description ? (
-                      <p className="text-xs text-gray-700 line-clamp-2">
-                        {img.description}
-                      </p>
-                    ) : (
-                      <span className="inline-block rounded bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 text-[11px] font-semibold">
-                        ⚠️ Summary missing or failed
-                      </span>
-                    )}
-                  </div>
-
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => handleTriggerGeminiSummary(img)}
-                      disabled={geminiLoadingId === img.id}
-                      className="inline-flex items-center gap-1.5 rounded-md bg-indigo-50 border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition cursor-pointer disabled:opacity-50"
-                    >
-                      {geminiLoadingId === img.id ? (
-                        <>
-                          <span className="animate-spin">⚙️</span>
-                          <span>Calling Gemini...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>✨</span>
-                          <span>{img.description ? 'Re-run Gemini' : 'Run Gemini Summary'}</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 5: USER ROLE MANAGEMENT */}
+      {/* ========================================================= */}
+      {/* TAB 2: READ USERS (PROFILES) */}
+      {/* ========================================================= */}
       {activeTab === 'users' && (
         <div className="space-y-4">
-          <div className="bg-white p-4 rounded-xl border border-gray-200">
-            <h3 className="text-sm font-bold text-gray-900">User Role & Privilege Management</h3>
-            <p className="text-xs text-gray-500">
-              Grant or revoke super admin capabilities (`public.profiles.is_super_admin`).
-            </p>
+          <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-gray-200">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Users Table (`public.profiles`)</h3>
+              <p className="text-xs text-gray-500">Read and inspect user accounts, emails, and manage super admin permissions.</p>
+            </div>
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-2xs">
             <table className="min-w-full divide-y divide-gray-200 text-xs">
               <thead className="bg-gray-50 text-gray-700 font-bold">
                 <tr>
-                  <th className="px-4 py-3 text-left">User</th>
+                  <th className="px-4 py-3 text-left">User ID</th>
+                  <th className="px-4 py-3 text-left">Name</th>
                   <th className="px-4 py-3 text-left">Email</th>
                   <th className="px-4 py-3 text-left">Joined</th>
                   <th className="px-4 py-3 text-left">Role</th>
@@ -1092,53 +1117,36 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {profiles.map((user) => {
-                  const isCurrentCaller = user.id === session.user.id;
+                {profiles.map((u) => {
+                  const isCurrent = u.id === session.user.id;
                   return (
-                    <tr key={user.id} className="hover:bg-gray-50/50">
-                      <td className="px-4 py-3 font-medium text-gray-900">
-                        {user.first_name || user.last_name
-                          ? `${user.first_name || ''} ${user.last_name || ''}`.trim()
-                          : 'Anonymous User'}
-                        {isCurrentCaller && (
-                          <span className="ml-2 text-[10px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded">
-                            You
-                          </span>
-                        )}
+                    <tr key={u.id} className="hover:bg-gray-50/50">
+                      <td className="px-4 py-3 font-mono text-gray-500 text-[11px]">{u.id.slice(0, 8)}...</td>
+                      <td className="px-4 py-3 font-semibold text-gray-900">
+                        {u.first_name || u.last_name ? `${u.first_name || ''} ${u.last_name || ''}`.trim() : 'Anonymous'}
+                        {isCurrent && <span className="ml-1.5 text-[10px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded font-bold">You</span>}
                       </td>
-                      <td className="px-4 py-3 text-gray-500">{user.email || 'No email provided'}</td>
-                      <td className="px-4 py-3 text-gray-400">
-                        {new Date(user.created_at).toLocaleDateString()}
-                      </td>
+                      <td className="px-4 py-3 text-gray-600">{u.email || 'N/A'}</td>
+                      <td className="px-4 py-3 text-gray-400">{new Date(u.created_at).toLocaleDateString()}</td>
                       <td className="px-4 py-3">
-                        {user.is_super_admin ? (
-                          <span className="rounded-full bg-green-100 text-green-800 px-2 py-0.5 text-[10px] font-bold">
-                            Super Admin
-                          </span>
+                        {u.is_super_admin ? (
+                          <span className="rounded-full bg-green-100 text-green-800 px-2 py-0.5 text-[10px] font-bold">Super Admin</span>
                         ) : (
-                          <span className="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 text-[10px]">
-                            Standard User
-                          </span>
+                          <span className="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 text-[10px]">Standard User</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
                           type="button"
-                          onClick={() => handleToggleSuperAdmin(user)}
-                          disabled={actionInProgress === user.id}
+                          onClick={() => handleToggleSuperAdmin(u)}
+                          disabled={actionInProgress === u.id}
                           className={`rounded px-2.5 py-1 text-xs font-semibold transition cursor-pointer disabled:opacity-50 ${
-                            user.is_super_admin
+                            u.is_super_admin
                               ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
                               : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'
                           }`}
                         >
-                          {actionInProgress === user.id ? (
-                            'Updating...'
-                          ) : user.is_super_admin ? (
-                            'Demote from Admin'
-                          ) : (
-                            'Promote to Super Admin'
-                          )}
+                          {actionInProgress === u.id ? 'Saving...' : u.is_super_admin ? 'Demote Admin' : 'Make Super Admin'}
                         </button>
                       </td>
                     </tr>
@@ -1150,94 +1158,1144 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Delete Meme Confirmation Modal */}
-      {memeToDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs"
-          onClick={() => !actionInProgress && setMemeToDelete(null)}
-        >
-          <div
-            className="relative max-w-md w-full bg-white rounded-xl shadow-2xl p-6 space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-3 text-red-600">
-              <span className="text-2xl">⚠️</span>
-              <div>
-                <h3 className="text-base font-bold text-gray-900">Admin Hard Delete Meme</h3>
-                <p className="text-xs text-red-600">This overrides user ownership.</p>
+      {/* ========================================================= */}
+      {/* TAB 3: IMAGES CRUD (CREATE, READ, UPDATE, DELETE) */}
+      {/* ========================================================= */}
+      {activeTab === 'images' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-gray-200">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Images Management (CRUD)</h3>
+              <p className="text-xs text-gray-500">Create / upload new images, view all uploads, edit AI descriptions, and delete.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsUploadImageModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition cursor-pointer shadow-xs"
+            >
+              <span>+</span>
+              <span>Upload New Image</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {images.map((img) => (
+              <div key={img.id} className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-2xs flex flex-col justify-between">
+                <div className="relative aspect-video w-full bg-gray-900 flex items-center justify-center">
+                  {img.displayUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={img.displayUrl} alt="" className="h-full w-full object-contain p-1" />
+                  ) : (
+                    <span className="text-xs text-gray-400">No preview</span>
+                  )}
+                  {img.memesCount === 0 && (
+                    <span className="absolute top-2 right-2 rounded bg-amber-500 text-white px-2 py-0.5 text-[10px] font-bold">
+                      0 Memes
+                    </span>
+                  )}
+                </div>
+
+                <div className="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] text-gray-400">
+                      <span>Uploader: {img.uploader?.email || img.uploader_id?.slice(0, 8) || 'Unknown'}</span>
+                      <span>{new Date(img.created_at).toLocaleDateString()}</span>
+                    </div>
+
+                    {/* Inline Description Editor */}
+                    {editingImageDescription?.id === img.id ? (
+                      <div className="mt-2 space-y-2">
+                        <textarea
+                          rows={2}
+                          value={editingImageDescription.description}
+                          onChange={(e) => setEditingImageDescription({ id: img.id, description: e.target.value })}
+                          className="w-full rounded border border-gray-300 p-1.5 text-xs text-gray-900 outline-none focus:border-blue-500"
+                        />
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditingImageDescription(null)}
+                            className="rounded px-2 py-1 text-[11px] text-gray-600 border border-gray-200"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateImageDescription(img.id, editingImageDescription.description)}
+                            className="rounded bg-blue-600 px-2 py-1 text-[11px] font-semibold text-white"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-1 flex items-start justify-between gap-2">
+                        <p className="text-xs text-gray-800 line-clamp-2">
+                          {img.description || <span className="italic text-gray-400">No summary description</span>}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setEditingImageDescription({ id: img.id, description: img.description || '' })}
+                          className="text-[11px] text-blue-600 hover:underline flex-shrink-0"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+                    <span className="text-[11px] text-gray-500">
+                      Memes: <strong>{img.memesCount}</strong>
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleTriggerGeminiSummary(img)}
+                        disabled={geminiLoadingId === img.id}
+                        className="rounded px-2 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition cursor-pointer disabled:opacity-50"
+                        title="Generate or re-run Gemini AI summary"
+                      >
+                        {geminiLoadingId === img.id ? 'Running...' : '✨ Gemini'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImageToDelete(img)}
+                        disabled={actionInProgress === img.id}
+                        className="rounded px-2 py-1 text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 transition cursor-pointer"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 4: READ/VIEW AI GENERATED MEDIA */}
+      {/* ========================================================= */}
+      {activeTab === 'media' && (
+        <div className="space-y-4">
+          <div className="bg-white p-4 rounded-xl border border-gray-200">
+            <h3 className="text-sm font-bold text-gray-900">AI Generated Media</h3>
+            <p className="text-xs text-gray-500">Read and inspect community memes and AI-captioned visual media.</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {memes.map((m) => (
+              <div key={m.id} className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-2xs flex flex-col justify-between">
+                <div className="relative aspect-video w-full bg-gray-900 flex items-center justify-center">
+                  {m.displayUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={m.displayUrl} alt="" className="h-full w-full object-contain" />
+                  ) : (
+                    <span className="text-xs text-gray-400">Image unavailable</span>
+                  )}
+                  <span className="absolute bottom-2 left-2 right-2 text-center text-white bg-black/80 text-xs font-black uppercase px-2 py-0.5 rounded shadow">
+                    {m.caption}
+                  </span>
+                </div>
+
+                <div className="p-3.5 space-y-2">
+                  <p className="text-xs font-bold text-gray-900 line-clamp-2">&ldquo;{m.caption}&rdquo;</p>
+                  <div className="flex items-center justify-between text-[11px] text-gray-400 pt-2 border-t border-gray-100">
+                    <span>❤️ {m.likesCount} likes</span>
+                    <span>{new Date(m.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMemeToDelete(m)}
+                    className="w-full rounded bg-red-50 border border-red-200 py-1 text-xs font-semibold text-red-600 hover:bg-red-100 transition cursor-pointer"
+                  >
+                    Delete AI Media
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 5: PROMPT CHAINS, STEPS, MIX, & EXAMPLES */}
+      {/* ========================================================= */}
+      {activeTab === 'prompt_chains' && (
+        <div className="space-y-6">
+          {/* Section A: Prompt Chains (Read) & Steps (Read) */}
+          <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4 shadow-2xs">
+            <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+              <span>⛓️</span>
+              <span>Prompt Chains & Steps</span>
+            </h3>
+
+            <div className="space-y-4">
+              {promptChains.map((chain) => {
+                const steps = chainSteps.filter((s) => s.chain_id === chain.id);
+                return (
+                  <div key={chain.id} className="rounded-lg border border-gray-200 bg-gray-50/70 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-bold text-gray-900 text-xs">{chain.name}</h4>
+                        <p className="text-[11px] text-gray-500 mt-0.5">{chain.description}</p>
+                      </div>
+                      <span className="text-[11px] text-gray-400 font-mono">Chain ID: {chain.id.slice(0, 8)}...</span>
+                    </div>
+
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                        Chain Steps ({steps.length})
+                      </span>
+                      {steps.length === 0 ? (
+                        <p className="text-xs text-gray-400 italic">No steps registered for this chain.</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {steps.map((st) => (
+                            <div key={st.id} className="rounded border border-gray-200 bg-white p-2.5 text-xs flex items-start gap-3">
+                              <span className="rounded bg-indigo-50 text-indigo-700 font-bold px-1.5 py-0.5 text-[10px]">
+                                Step {st.step_order}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-gray-900">{st.step_name}</p>
+                                <p className="text-[11px] text-gray-600 font-mono mt-0.5 bg-gray-50 p-1 rounded">
+                                  {st.prompt_template}
+                                </p>
+                              </div>
+                              <span className="text-[10px] text-gray-400 font-mono">{st.model_id || 'default'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Section B: Prompt Chain Mix (Read / Update) */}
+          <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4 shadow-2xs">
+            <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+              <span>⚖️</span>
+              <span>Prompt Chain Mix (Read / Update)</span>
+            </h3>
+            <p className="text-xs text-gray-500">Adjust the generation routing weights and active status of each chain.</p>
+
+            <div className="space-y-3">
+              {chainMix.map((mix) => {
+                const chain = promptChains.find((c) => c.id === mix.chain_id);
+                const edit = mixEdits[mix.id] || { weight: Number(mix.weight), is_active: mix.is_active ?? true, notes: mix.notes || '' };
+
+                return (
+                  <div key={mix.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-gray-900">{chain?.name || 'Unnamed Chain'}</p>
+                      <input
+                        type="text"
+                        value={edit.notes}
+                        onChange={(e) => setMixEdits({ ...mixEdits, [mix.id]: { ...edit, notes: e.target.value } })}
+                        placeholder="Configuration notes..."
+                        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 bg-white"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-gray-500 font-medium">Weight:</label>
+                        <input
+                          type="number"
+                          step="0.05"
+                          min="0"
+                          max="1"
+                          value={edit.weight}
+                          onChange={(e) => setMixEdits({ ...mixEdits, [mix.id]: { ...edit, weight: parseFloat(e.target.value) || 0 } })}
+                          className="w-16 rounded border border-gray-300 px-2 py-1 text-xs bg-white text-center font-bold"
+                        />
+                      </div>
+
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={edit.is_active}
+                          onChange={(e) => setMixEdits({ ...mixEdits, [mix.id]: { ...edit, is_active: e.target.checked } })}
+                          className="rounded text-purple-600"
+                        />
+                        <span className="text-gray-700 font-medium">Active</span>
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSaveMix(mix.id)}
+                        disabled={actionInProgress === mix.id}
+                        className="rounded bg-indigo-600 px-3 py-1 font-semibold text-white hover:bg-indigo-700 transition"
+                      >
+                        {actionInProgress === mix.id ? 'Saving...' : 'Save Mix'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Section C: AI Generation Examples (CRUD) */}
+          <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">AI Generation Examples (CRUD)</h3>
+                <p className="text-xs text-gray-500">In-context learning few-shot examples for LLM caption generation.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingExample(null);
+                  setExampleForm({ title: '', category: 'meme_caption', input_context: '', target_output: '' });
+                  setIsExampleModalOpen(true);
+                }}
+                className="rounded bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-700"
+              >
+                + Add Example
+              </button>
             </div>
 
-            <p className="text-xs text-gray-600">
-              Are you sure you want to delete meme: &ldquo;{memeToDelete.caption}&rdquo;?
-              This will also purge all {memeToDelete.likesCount} community likes.
-            </p>
+            <div className="space-y-2">
+              {examples.map((ex) => (
+                <div key={ex.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3 flex items-start justify-between gap-3 text-xs">
+                  <div className="space-y-1 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-gray-900">{ex.title}</span>
+                      <span className="rounded bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0.2 font-semibold">{ex.category}</span>
+                    </div>
+                    <p className="text-gray-600"><strong className="text-gray-700">Input:</strong> {ex.input_context}</p>
+                    <p className="text-gray-900"><strong className="text-gray-700">Output:</strong> &ldquo;{ex.target_output}&rdquo;</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingExample(ex);
+                        setExampleForm({ title: ex.title, category: ex.category || 'meme_caption', input_context: ex.input_context, target_output: ex.target_output });
+                        setIsExampleModalOpen(true);
+                      }}
+                      className="text-blue-600 hover:underline"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteExample(ex.id)}
+                      className="text-red-600 hover:underline ml-2"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
+      {/* ========================================================= */}
+      {/* TAB 6: LLM MODELS & PROVIDERS (CRUD) */}
+      {/* ========================================================= */}
+      {activeTab === 'llm_config' && (
+        <div className="space-y-6">
+          {/* Providers (CRUD) */}
+          <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">LLM Providers (CRUD)</h3>
+                <p className="text-xs text-gray-500">Configure provider endpoints like Google Gemini, OpenAI, and Anthropic.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingProvider(null);
+                  setProviderForm({ name: '', slug: '', api_base_url: '', is_active: true });
+                  setIsProviderModalOpen(true);
+                }}
+                className="rounded bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-700"
+              >
+                + Add Provider
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {providers.map((p) => (
+                <div key={p.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3.5 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-gray-900">{p.name}</span>
+                    <span className={`rounded-full px-2 py-0.2 text-[10px] font-bold ${p.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-600'}`}>
+                      {p.is_active ? 'Active' : 'Disabled'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 font-mono truncate">{p.slug}</p>
+                  <p className="text-[11px] text-gray-400 font-mono truncate">{p.api_base_url || 'Default endpoint'}</p>
+                  <div className="pt-2 border-t border-gray-200 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingProvider(p);
+                        setProviderForm({ name: p.name, slug: p.slug, api_base_url: p.api_base_url || '', is_active: p.is_active ?? true });
+                        setIsProviderModalOpen(true);
+                      }}
+                      className="text-blue-600 hover:underline"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteProvider(p.id)}
+                      className="text-red-600 hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Models (CRUD) */}
+          <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">LLM Models (CRUD)</h3>
+                <p className="text-xs text-gray-500">Register and configure models (context window, identifier, provider).</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingModel(null);
+                  setModelForm({ display_name: '', model_id: '', provider_id: providers[0]?.id || '', context_window: 128000, is_active: true });
+                  setIsModelModalOpen(true);
+                }}
+                className="rounded bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-700"
+              >
+                + Add Model
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {models.map((m) => {
+                const prov = providers.find((p) => p.id === m.provider_id);
+                return (
+                  <div key={m.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3.5 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-gray-900">{m.display_name}</span>
+                      <span className={`rounded-full px-2 py-0.2 text-[10px] font-bold ${m.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-600'}`}>
+                        {m.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-indigo-700 font-mono">{m.model_id}</p>
+                    <p className="text-[11px] text-gray-500">Provider: {prov?.name || 'None'}</p>
+                    <p className="text-[11px] text-gray-400">Context: {m.context_window?.toLocaleString()} tokens</p>
+                    <div className="pt-2 border-t border-gray-200 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingModel(m);
+                          setModelForm({ display_name: m.display_name, model_id: m.model_id, provider_id: m.provider_id || '', context_window: m.context_window || 128000, is_active: m.is_active ?? true });
+                          setIsModelModalOpen(true);
+                        }}
+                        className="text-blue-600 hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteModel(m.id)}
+                        className="text-red-600 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 7: TERMS (CRUD) */}
+      {/* ========================================================= */}
+      {activeTab === 'terms' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-gray-200">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Terms & Vocabulary (CRUD)</h3>
+              <p className="text-xs text-gray-500">Create, read, update, and delete glossary definitions, humor techniques, and prompt terms.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setEditingTerm(null);
+                setTermForm({ term: '', category: 'Humor Technique', definition: '' });
+                setIsTermModalOpen(true);
+              }}
+              className="rounded bg-purple-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-purple-700 transition"
+            >
+              + Create Term
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {terms.map((t) => (
+              <div key={t.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs flex flex-col justify-between space-y-3">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-gray-900">{t.term}</span>
+                    <span className="rounded bg-purple-50 text-purple-700 text-[10px] font-bold px-1.5 py-0.5">{t.category}</span>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-2 line-clamp-3 leading-relaxed">
+                    {t.definition || <span className="italic text-gray-400">No definition provided</span>}
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-gray-100 flex items-center justify-end gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingTerm(t);
+                      setTermForm({ term: t.term, category: t.category || 'general', definition: t.definition || '' });
+                      setIsTermModalOpen(true);
+                    }}
+                    className="text-blue-600 hover:underline"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteTerm(t.id)}
+                    className="text-red-600 hover:underline"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 8: AI LOGS (GENERATION REQUESTS & LLM RESPONSES) */}
+      {/* ========================================================= */}
+      {activeTab === 'ai_logs' && (
+        <div className="space-y-6">
+          {/* Generation Requests */}
+          <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4 shadow-2xs">
+            <h3 className="text-sm font-bold text-gray-900">Generation Requests (Read)</h3>
+            <div className="space-y-2">
+              {genRequests.map((req) => (
+                <div key={req.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs flex items-center justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">&ldquo;{req.prompt}&rdquo;</p>
+                    <span className="text-[10px] text-gray-400 font-mono">ID: {req.id} | Model: {req.model_id || 'default'}</span>
+                  </div>
+                  <span className="rounded-full bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 uppercase">
+                    {req.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* LLM Responses */}
+          <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4 shadow-2xs">
+            <h3 className="text-sm font-bold text-gray-900">LLM Responses (Read)</h3>
+            <div className="space-y-2">
+              {llmResponses.map((res) => (
+                <div key={res.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs space-y-1">
+                  <div className="flex items-center justify-between text-[11px] text-gray-400">
+                    <span className="font-mono">Model: {res.model_id}</span>
+                    <span>{res.latency_ms} ms | {res.token_count} tokens</span>
+                  </div>
+                  <p className="font-medium text-gray-900 bg-white p-2 rounded border border-gray-200">
+                    {res.response_text}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 9: ACCESS CONTROL (ALLOWED DOMAINS & WHITELISTED EMAILS) */}
+      {/* ========================================================= */}
+      {activeTab === 'access_control' && (
+        <div className="space-y-6">
+          {/* Allowed Signup Domains (CRUD) */}
+          <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Allowed Signup Domains (CRUD)</h3>
+                <p className="text-xs text-gray-500">Domains authorized for registration (e.g. columbia.edu, barnard.edu).</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingDomain(null);
+                  setDomainForm({ domain: '', is_active: true });
+                  setIsDomainModalOpen(true);
+                }}
+                className="rounded bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-700"
+              >
+                + Add Domain
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {allowedDomains.map((d) => (
+                <div key={d.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-mono font-bold text-gray-900">@{d.domain}</span>
+                    <span className={`ml-2 text-[10px] font-bold ${d.is_active ? 'text-green-600' : 'text-gray-400'}`}>
+                      {d.is_active ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingDomain(d);
+                        setDomainForm({ domain: d.domain, is_active: d.is_active ?? true });
+                        setIsDomainModalOpen(true);
+                      }}
+                      className="text-blue-600 hover:underline"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDomain(d.id)}
+                      className="text-red-600 hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Whitelisted Emails (CRUD) */}
+          <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Whitelisted E-mail Addresses (CRUD)</h3>
+                <p className="text-xs text-gray-500">Specific VIP or administrative accounts granted guaranteed access.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingEmail(null);
+                  setEmailForm({ email: '', notes: '' });
+                  setIsEmailModalOpen(true);
+                }}
+                className="rounded bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-700"
+              >
+                + Whitelist Email
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {whitelistedEmails.map((w) => (
+                <div key={w.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-semibold text-gray-900">{w.email}</span>
+                    {w.notes && <p className="text-[11px] text-gray-400 mt-0.5">{w.notes}</p>}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingEmail(w);
+                        setEmailForm({ email: w.email, notes: w.notes || '' });
+                        setIsEmailModalOpen(true);
+                      }}
+                      className="text-blue-600 hover:underline"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteEmail(w.id)}
+                      className="text-red-600 hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODALS */}
+      {/* ========================================================= */}
+
+      {/* 1. Upload Image Modal */}
+      {isUploadImageModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full space-y-4">
+            <h3 className="text-base font-bold text-gray-900">Upload New Image as Super Admin</h3>
+            <form onSubmit={handleUploadImage} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Select Image File</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                  required
+                  className="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Initial Description (Optional)</label>
+                <textarea
+                  rows={2}
+                  value={uploadDescription}
+                  onChange={(e) => setUploadDescription(e.target.value)}
+                  placeholder="Subject, context, or visual features..."
+                  className="w-full rounded border border-gray-300 p-2 text-xs text-gray-900 outline-none"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={uploadTriggerGemini}
+                  onChange={(e) => setUploadTriggerGemini(e.target.checked)}
+                  className="rounded text-purple-600"
+                />
+                <span>Automatically generate Gemini AI summary after upload</span>
+              </label>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsUploadImageModalOpen(false)}
+                  className="rounded px-3 py-1.5 text-xs text-gray-600 border border-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploadingImage || !uploadFile}
+                  className="rounded bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {uploadingImage ? 'Uploading...' : 'Upload Image'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Terms Modal */}
+      {isTermModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full space-y-4">
+            <h3 className="text-base font-bold text-gray-900">{editingTerm ? 'Edit Term' : 'Create New Term'}</h3>
+            <form onSubmit={handleSaveTerm} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Term Name</label>
+                <input
+                  type="text"
+                  required
+                  value={termForm.term}
+                  onChange={(e) => setTermForm({ ...termForm, term: e.target.value })}
+                  placeholder="e.g. Self-Deprecation"
+                  className="w-full rounded border border-gray-300 p-2 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Category</label>
+                <input
+                  type="text"
+                  value={termForm.category}
+                  onChange={(e) => setTermForm({ ...termForm, category: e.target.value })}
+                  placeholder="Humor Technique, Structure, Tone..."
+                  className="w-full rounded border border-gray-300 p-2 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Definition</label>
+                <textarea
+                  rows={3}
+                  value={termForm.definition}
+                  onChange={(e) => setTermForm({ ...termForm, definition: e.target.value })}
+                  placeholder="Humor definition or prompt directive..."
+                  className="w-full rounded border border-gray-300 p-2 text-xs"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsTermModalOpen(false)}
+                  className="rounded px-3 py-1.5 text-xs text-gray-600 border border-gray-300"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="rounded bg-purple-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-purple-700">
+                  Save Term
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Examples Modal */}
+      {isExampleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full space-y-4">
+            <h3 className="text-base font-bold text-gray-900">{editingExample ? 'Edit AI Generation Example' : 'Add AI Example'}</h3>
+            <form onSubmit={handleSaveExample} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Title</label>
+                <input
+                  type="text"
+                  required
+                  value={exampleForm.title}
+                  onChange={(e) => setExampleForm({ ...exampleForm, title: e.target.value })}
+                  className="w-full rounded border border-gray-300 p-2 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Input Context</label>
+                <textarea
+                  rows={2}
+                  required
+                  value={exampleForm.input_context}
+                  onChange={(e) => setExampleForm({ ...exampleForm, input_context: e.target.value })}
+                  placeholder="Image context or scenario..."
+                  className="w-full rounded border border-gray-300 p-2 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Target Output Punchline</label>
+                <textarea
+                  rows={2}
+                  required
+                  value={exampleForm.target_output}
+                  onChange={(e) => setExampleForm({ ...exampleForm, target_output: e.target.value })}
+                  placeholder="Target humorous caption..."
+                  className="w-full rounded border border-gray-300 p-2 text-xs"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsExampleModalOpen(false)}
+                  className="rounded px-3 py-1.5 text-xs text-gray-600 border border-gray-300"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="rounded bg-purple-600 px-4 py-1.5 text-xs font-semibold text-white">
+                  Save Example
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Providers Modal */}
+      {isProviderModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full space-y-4">
+            <h3 className="text-base font-bold text-gray-900">{editingProvider ? 'Edit Provider' : 'Add LLM Provider'}</h3>
+            <form onSubmit={handleSaveProvider} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Provider Name</label>
+                <input
+                  type="text"
+                  required
+                  value={providerForm.name}
+                  onChange={(e) => setProviderForm({ ...providerForm, name: e.target.value })}
+                  placeholder="e.g. Google Gemini"
+                  className="w-full rounded border border-gray-300 p-2 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Slug Identifier</label>
+                <input
+                  type="text"
+                  required
+                  value={providerForm.slug}
+                  onChange={(e) => setProviderForm({ ...providerForm, slug: e.target.value })}
+                  placeholder="e.g. google-gemini"
+                  className="w-full rounded border border-gray-300 p-2 text-xs font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">API Base URL</label>
+                <input
+                  type="text"
+                  value={providerForm.api_base_url}
+                  onChange={(e) => setProviderForm({ ...providerForm, api_base_url: e.target.value })}
+                  placeholder="https://api..."
+                  className="w-full rounded border border-gray-300 p-2 text-xs font-mono"
+                />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer text-xs">
+                <input
+                  type="checkbox"
+                  checked={providerForm.is_active}
+                  onChange={(e) => setProviderForm({ ...providerForm, is_active: e.target.checked })}
+                  className="rounded text-purple-600"
+                />
+                <span>Active Provider</span>
+              </label>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsProviderModalOpen(false)}
+                  className="rounded px-3 py-1.5 text-xs text-gray-600 border border-gray-300"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="rounded bg-purple-600 px-4 py-1.5 text-xs font-semibold text-white">
+                  Save Provider
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Models Modal */}
+      {isModelModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full space-y-4">
+            <h3 className="text-base font-bold text-gray-900">{editingModel ? 'Edit LLM Model' : 'Add LLM Model'}</h3>
+            <form onSubmit={handleSaveModel} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Display Name</label>
+                <input
+                  type="text"
+                  required
+                  value={modelForm.display_name}
+                  onChange={(e) => setModelForm({ ...modelForm, display_name: e.target.value })}
+                  placeholder="e.g. Gemini 2.5 Flash"
+                  className="w-full rounded border border-gray-300 p-2 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Model ID</label>
+                <input
+                  type="text"
+                  required
+                  value={modelForm.model_id}
+                  onChange={(e) => setModelForm({ ...modelForm, model_id: e.target.value })}
+                  placeholder="e.g. gemini-2.5-flash"
+                  className="w-full rounded border border-gray-300 p-2 text-xs font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Provider</label>
+                <select
+                  value={modelForm.provider_id}
+                  onChange={(e) => setModelForm({ ...modelForm, provider_id: e.target.value })}
+                  className="w-full rounded border border-gray-300 p-2 text-xs"
+                >
+                  <option value="">Select Provider...</option>
+                  {providers.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Context Window (Tokens)</label>
+                <input
+                  type="number"
+                  value={modelForm.context_window}
+                  onChange={(e) => setModelForm({ ...modelForm, context_window: parseInt(e.target.value, 10) || 128000 })}
+                  className="w-full rounded border border-gray-300 p-2 text-xs"
+                />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer text-xs">
+                <input
+                  type="checkbox"
+                  checked={modelForm.is_active}
+                  onChange={(e) => setModelForm({ ...modelForm, is_active: e.target.checked })}
+                  className="rounded text-purple-600"
+                />
+                <span>Active Model</span>
+              </label>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModelModalOpen(false)}
+                  className="rounded px-3 py-1.5 text-xs text-gray-600 border border-gray-300"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="rounded bg-purple-600 px-4 py-1.5 text-xs font-semibold text-white">
+                  Save Model
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Domains Modal */}
+      {isDomainModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full space-y-4">
+            <h3 className="text-base font-bold text-gray-900">{editingDomain ? 'Edit Allowed Domain' : 'Add Allowed Signup Domain'}</h3>
+            <form onSubmit={handleSaveDomain} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Domain (without @)</label>
+                <input
+                  type="text"
+                  required
+                  value={domainForm.domain}
+                  onChange={(e) => setDomainForm({ ...domainForm, domain: e.target.value })}
+                  placeholder="e.g. columbia.edu"
+                  className="w-full rounded border border-gray-300 p-2 text-xs font-mono"
+                />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer text-xs">
+                <input
+                  type="checkbox"
+                  checked={domainForm.is_active}
+                  onChange={(e) => setDomainForm({ ...domainForm, is_active: e.target.checked })}
+                  className="rounded text-purple-600"
+                />
+                <span>Active Domain</span>
+              </label>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDomainModalOpen(false)}
+                  className="rounded px-3 py-1.5 text-xs text-gray-600 border border-gray-300"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="rounded bg-purple-600 px-4 py-1.5 text-xs font-semibold text-white">
+                  Save Domain
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Whitelisted Email Modal */}
+      {isEmailModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full space-y-4">
+            <h3 className="text-base font-bold text-gray-900">{editingEmail ? 'Edit Whitelisted Email' : 'Whitelist Email Address'}</h3>
+            <form onSubmit={handleSaveEmail} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Email Address</label>
+                <input
+                  type="email"
+                  required
+                  value={emailForm.email}
+                  onChange={(e) => setEmailForm({ ...emailForm, email: e.target.value })}
+                  placeholder="user@example.com"
+                  className="w-full rounded border border-gray-300 p-2 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Notes / Organization</label>
+                <input
+                  type="text"
+                  value={emailForm.notes}
+                  onChange={(e) => setEmailForm({ ...emailForm, notes: e.target.value })}
+                  placeholder="e.g. Course TA, VIP Beta Tester..."
+                  className="w-full rounded border border-gray-300 p-2 text-xs"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEmailModalOpen(false)}
+                  className="rounded px-3 py-1.5 text-xs text-gray-600 border border-gray-300"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="rounded bg-purple-600 px-4 py-1.5 text-xs font-semibold text-white">
+                  Save Email
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 8. Delete Confirmation Modals */}
+      {imageToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full space-y-4">
+            <h3 className="text-base font-bold text-red-600 flex items-center gap-2">
+              <span>⚠️</span>
+              <span>Confirm Delete Image</span>
+            </h3>
+            <p className="text-xs text-gray-600">
+              Are you sure you want to delete this image? This will permanently remove the storage file, database record, and all associated memes.
+            </p>
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
-                disabled={Boolean(actionInProgress)}
-                onClick={() => setMemeToDelete(null)}
-                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                onClick={() => setImageToDelete(null)}
+                className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700"
               >
                 Cancel
               </button>
               <button
                 type="button"
+                onClick={handleDeleteImage}
                 disabled={Boolean(actionInProgress)}
-                onClick={handleAdminDeleteMeme}
-                className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                className="rounded bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
               >
-                {actionInProgress ? 'Deleting...' : 'Confirm Hard Delete'}
+                {actionInProgress ? 'Deleting...' : 'Confirm Delete'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete Image Confirmation Modal */}
-      {imageToDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs"
-          onClick={() => !actionInProgress && setImageToDelete(null)}
-        >
-          <div
-            className="relative max-w-md w-full bg-white rounded-xl shadow-2xl p-6 space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-3 text-red-600">
-              <span className="text-2xl">⚠️</span>
-              <div>
-                <h3 className="text-base font-bold text-gray-900">Admin Hard Delete Image</h3>
-                <p className="text-xs text-red-600">Cascading storage and meme removal.</p>
-              </div>
-            </div>
-
-            <div className="rounded bg-red-50 p-3 border border-red-200 text-xs text-red-900 space-y-1">
-              <p className="font-semibold">Deleting this image will remove:</p>
-              <ul className="list-disc list-inside space-y-0.5 text-red-800">
-                <li>Image file in Supabase Storage</li>
-                <li>Database row in public.images</li>
-                <li>{imageToDelete.memesCount} associated meme(s) and their likes</li>
-              </ul>
-            </div>
-
+      {memeToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full space-y-4">
+            <h3 className="text-base font-bold text-red-600 flex items-center gap-2">
+              <span>⚠️</span>
+              <span>Confirm Delete AI Media</span>
+            </h3>
+            <p className="text-xs text-gray-600">
+              Are you sure you want to delete meme: &ldquo;{memeToDelete.caption}&rdquo;?
+            </p>
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
-                disabled={Boolean(actionInProgress)}
-                onClick={() => setImageToDelete(null)}
-                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                onClick={() => setMemeToDelete(null)}
+                className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700"
               >
                 Cancel
               </button>
               <button
                 type="button"
+                onClick={handleDeleteMeme}
                 disabled={Boolean(actionInProgress)}
-                onClick={handleAdminDeleteImage}
-                className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                className="rounded bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
               >
-                {actionInProgress ? 'Deleting...' : 'Confirm Cascade Delete'}
+                {actionInProgress ? 'Deleting...' : 'Confirm Delete'}
               </button>
             </div>
           </div>

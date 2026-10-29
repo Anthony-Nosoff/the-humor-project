@@ -166,6 +166,294 @@ export type Database = {
         }
         Relationships: []
       }
+      llm_providers: {
+        Row: {
+          api_base_url: string | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          name: string
+          slug: string
+        }
+        Insert: {
+          api_base_url?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name: string
+          slug: string
+        }
+        Update: {
+          api_base_url?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          slug?: string
+        }
+        Relationships: []
+      }
+      llm_models: {
+        Row: {
+          context_window: number | null
+          created_at: string
+          display_name: string
+          id: string
+          is_active: boolean | null
+          model_id: string
+          provider_id: string | null
+        }
+        Insert: {
+          context_window?: number | null
+          created_at?: string
+          display_name: string
+          id?: string
+          is_active?: boolean | null
+          model_id: string
+          provider_id?: string | null
+        }
+        Update: {
+          context_window?: number | null
+          created_at?: string
+          display_name?: string
+          id?: string
+          is_active?: boolean | null
+          model_id?: string
+          provider_id?: string | null
+        }
+        Relationships: []
+      }
+      prompt_chains: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      prompt_chain_steps: {
+        Row: {
+          chain_id: string | null
+          created_at: string
+          id: string
+          model_id: string | null
+          prompt_template: string
+          step_name: string
+          step_order: number
+        }
+        Insert: {
+          chain_id?: string | null
+          created_at?: string
+          id?: string
+          model_id?: string | null
+          prompt_template: string
+          step_name: string
+          step_order: number
+        }
+        Update: {
+          chain_id?: string | null
+          created_at?: string
+          id?: string
+          model_id?: string | null
+          prompt_template?: string
+          step_name?: string
+          step_order?: number
+        }
+        Relationships: []
+      }
+      prompt_chain_mix: {
+        Row: {
+          chain_id: string | null
+          id: string
+          is_active: boolean | null
+          notes: string | null
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          chain_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          notes?: string | null
+          updated_at?: string
+          weight?: number
+        }
+        Update: {
+          chain_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          notes?: string | null
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: []
+      }
+      terms: {
+        Row: {
+          category: string | null
+          created_at: string
+          definition: string | null
+          id: string
+          term: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          definition?: string | null
+          id?: string
+          term: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          definition?: string | null
+          id?: string
+          term?: string
+        }
+        Relationships: []
+      }
+      generation_requests: {
+        Row: {
+          created_at: string
+          id: string
+          model_id: string | null
+          prompt: string
+          status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          model_id?: string | null
+          prompt: string
+          status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          model_id?: string | null
+          prompt?: string
+          status?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      llm_responses: {
+        Row: {
+          created_at: string
+          id: string
+          latency_ms: number | null
+          model_id: string | null
+          request_id: string | null
+          response_text: string
+          token_count: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          latency_ms?: number | null
+          model_id?: string | null
+          request_id?: string | null
+          response_text: string
+          token_count?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          latency_ms?: number | null
+          model_id?: string | null
+          request_id?: string | null
+          response_text?: string
+          token_count?: number | null
+        }
+        Relationships: []
+      }
+      ai_generation_examples: {
+        Row: {
+          category: string | null
+          created_at: string
+          id: string
+          input_context: string
+          target_output: string
+          title: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          input_context: string
+          target_output: string
+          title: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          input_context?: string
+          target_output?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      allowed_signup_domains: {
+        Row: {
+          created_at: string
+          domain: string
+          id: string
+          is_active: boolean | null
+        }
+        Insert: {
+          created_at?: string
+          domain: string
+          id?: string
+          is_active?: boolean | null
+        }
+        Update: {
+          created_at?: string
+          domain?: string
+          id?: string
+          is_active?: boolean | null
+        }
+        Relationships: []
+      }
+      whitelisted_emails: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          notes: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          notes?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          notes?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -310,3 +598,14 @@ export type Profiles = Tables<"profiles">
 export type Memes = Tables<"memes">
 export type MemeRatings = Tables<"meme_ratings">
 export type Images = Tables<"images">
+export type LLMProviders = Tables<"llm_providers">
+export type LLMModels = Tables<"llm_models">
+export type PromptChains = Tables<"prompt_chains">
+export type PromptChainSteps = Tables<"prompt_chain_steps">
+export type PromptChainMix = Tables<"prompt_chain_mix">
+export type Terms = Tables<"terms">
+export type GenerationRequests = Tables<"generation_requests">
+export type LLMResponses = Tables<"llm_responses">
+export type AIGenerationExamples = Tables<"ai_generation_examples">
+export type AllowedSignupDomains = Tables<"allowed_signup_domains">
+export type WhitelistedEmails = Tables<"whitelisted_emails">
