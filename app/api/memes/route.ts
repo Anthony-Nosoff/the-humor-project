@@ -172,7 +172,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Meme not found.' }, { status: 404 });
     }
 
-    // 2. Verify ownership: the authenticated user must be the uploader of the meme's image
+    // 2. Verify ownership: user must be the uploader of the meme's image, or a super admin
     if (!meme.image_id) {
       return NextResponse.json(
         { error: 'You are not authorized to delete this meme.' },
@@ -193,7 +193,16 @@ export async function DELETE(request: Request) {
       );
     }
 
-    if (image.uploader_id !== user.id) {
+    // Check if user is a super admin
+    const { data: callerProfile } = await supabase
+      .from('profiles')
+      .select('is_super_admin')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const isSuperAdmin = Boolean(callerProfile?.is_super_admin);
+
+    if (image.uploader_id !== user.id && !isSuperAdmin) {
       return NextResponse.json(
         { error: 'You are only authorized to delete your own memes.' },
         { status: 403 }

@@ -72,8 +72,16 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Image not found.' }, { status: 404 });
     }
 
-    // 2. Verify ownership: user must be the uploader of the image
-    if (image.uploader_id !== user.id) {
+    // 2. Verify ownership: user must be the uploader of the image, or a super admin
+    const { data: callerProfile } = await supabase
+      .from('profiles')
+      .select('is_super_admin')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const isSuperAdmin = Boolean(callerProfile?.is_super_admin);
+
+    if (image.uploader_id !== user.id && !isSuperAdmin) {
       return NextResponse.json(
         { error: 'You are only authorized to delete your own images.' },
         { status: 403 }
