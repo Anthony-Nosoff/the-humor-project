@@ -677,7 +677,7 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="max-w-[1440px] mx-auto py-3 px-4 sm:px-6 space-y-3.5">
+    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 space-y-2.5">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-24 right-6 z-50 rounded-lg bg-gray-900 text-white px-4 py-2.5 text-xs shadow-xl flex items-center gap-2 animate-bounce">
@@ -687,17 +687,17 @@ export default function AdminPage() {
       )}
 
       {/* Admin Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-gray-200 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-gray-200 pb-2">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-2xl">🛡️</span>
-            <h1 className="text-xl font-bold text-gray-900">Super Admin Control Suite</h1>
+            <span className="text-xl">🛡️</span>
+            <h1 className="text-lg font-bold text-gray-900">Super Admin Control Suite</h1>
             <span className="rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 border border-emerald-200">
               Verified Super Admin
             </span>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Platform management: Users, Images, and Community Memes. AI pipelines & prompt chains currently undergoing architectural rework.
+          <p className="text-[11px] text-gray-500 mt-0.5">
+            Platform management: Users, Images, and Community Memes. AI pipelines undergoing rework.
           </p>
         </div>
 
@@ -729,7 +729,7 @@ export default function AdminPage() {
       </div>
 
       {/* Admin Layout with Left Pinned Collapsible Navigation (Desktop) & Separate Drawer (Mobile) */}
-      <div className="flex flex-col lg:flex-row gap-4 items-start relative">
+      <div className="flex flex-col lg:flex-row gap-3 items-start relative">
         {/* Mobile Backdrop (separate overlay, does not push content) */}
         {isMobileNavOpen && (
           <div
@@ -743,7 +743,7 @@ export default function AdminPage() {
         <aside
           className={`
             fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] h-full bg-white p-3.5 shadow-2xl overflow-y-auto transition-transform duration-300 ease-in-out
-            lg:static lg:z-auto lg:translate-x-0 lg:p-0 lg:bg-transparent lg:shadow-none lg:overflow-visible lg:h-auto lg:shrink-0 lg:sticky lg:top-3 lg:self-start lg:transition-[width] lg:duration-200
+            lg:static lg:z-auto lg:translate-x-0 lg:p-0 lg:bg-transparent lg:shadow-none lg:overflow-visible lg:h-auto lg:shrink-0 lg:sticky lg:top-3 lg:self-start lg:max-h-[calc(100dvh-11rem)] lg:overflow-y-auto lg:transition-[width] lg:duration-200
             ${isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'}
             ${isSidebarCollapsed ? 'lg:w-16' : 'lg:w-64 xl:w-72'}
           `}
@@ -963,19 +963,19 @@ export default function AdminPage() {
       {/* TAB 1: OVERVIEW & ANALYTICS */}
       {/* ========================================================= */}
       {activeTab === 'overview' && (
-        <div className="lg:h-[calc(100dvh-7.5rem)] flex flex-col gap-3 min-h-0">
+        <div className="lg:h-[calc(100dvh-11rem)] lg:max-h-[calc(100dvh-11rem)] flex flex-col gap-2 min-h-0">
           {/* Top KPI Metrics Strip - 4 Core Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setActiveTab('users')}
-              className="rounded-xl border border-gray-200 bg-white p-3 shadow-2xs text-left transition hover:border-purple-300 hover:shadow-xs group cursor-pointer"
+              className="rounded-xl border border-gray-200 bg-white p-2.5 shadow-2xs text-left transition hover:border-purple-300 hover:shadow-xs group cursor-pointer"
             >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-gray-500 font-medium">Profiles</span>
                 <span className="text-gray-400 group-hover:text-purple-600 transition text-xs">👥</span>
               </div>
-              <p className="text-xl font-bold text-gray-900 mt-0.5">{profiles.length}</p>
+              <p className="text-lg font-bold text-gray-900 mt-0.5">{profiles.length}</p>
               <span className="inline-block mt-0.5 text-[9px] font-semibold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded">
                 {overviewStats.superAdminsCount} Super {overviewStats.superAdminsCount === 1 ? 'Admin' : 'Admins'}
               </span>
@@ -984,13 +984,13 @@ export default function AdminPage() {
             <button
               type="button"
               onClick={() => setActiveTab('images')}
-              className="rounded-xl border border-gray-200 bg-white p-3 shadow-2xs text-left transition hover:border-sky-300 hover:shadow-xs group cursor-pointer"
+              className="rounded-xl border border-gray-200 bg-white p-2.5 shadow-2xs text-left transition hover:border-sky-300 hover:shadow-xs group cursor-pointer"
             >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-gray-500 font-medium">Images</span>
                 <span className="text-gray-400 group-hover:text-sky-600 transition text-xs">🖼️</span>
               </div>
-              <p className="text-xl font-bold text-gray-900 mt-0.5">{images.length}</p>
+              <p className="text-lg font-bold text-gray-900 mt-0.5">{images.length}</p>
               <span className="inline-block mt-0.5 text-[9px] font-semibold text-sky-700 bg-sky-50 px-1.5 py-0.2 rounded">
                 {overviewStats.imagesWithMemesCount} converted to memes
               </span>
@@ -999,24 +999,24 @@ export default function AdminPage() {
             <button
               type="button"
               onClick={() => setActiveTab('media')}
-              className="rounded-xl border border-gray-200 bg-white p-3 shadow-2xs text-left transition hover:border-purple-300 hover:shadow-xs group cursor-pointer"
+              className="rounded-xl border border-gray-200 bg-white p-2.5 shadow-2xs text-left transition hover:border-purple-300 hover:shadow-xs group cursor-pointer"
             >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-gray-500 font-medium">AI Memes</span>
                 <span className="text-gray-400 group-hover:text-purple-600 transition text-xs">🎭</span>
               </div>
-              <p className="text-xl font-bold text-purple-600 mt-0.5">{memes.length}</p>
+              <p className="text-lg font-bold text-purple-600 mt-0.5">{memes.length}</p>
               <span className="inline-block mt-0.5 text-[9px] font-semibold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded">
                 {overviewStats.imageToMemeConversion}% conversion rate
               </span>
             </button>
 
-            <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-2xs text-left">
+            <div className="rounded-xl border border-gray-200 bg-white p-2.5 shadow-2xs text-left">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-gray-500 font-medium">Community Likes</span>
                 <span className="text-rose-500 text-xs">❤️</span>
               </div>
-              <p className="text-xl font-bold text-rose-600 mt-0.5">{overviewStats.totalLikes}</p>
+              <p className="text-lg font-bold text-rose-600 mt-0.5">{overviewStats.totalLikes}</p>
               <span className="inline-block mt-0.5 text-[9px] font-semibold text-rose-700 bg-rose-50 px-1.5 py-0.2 rounded">
                 {overviewStats.memesWithLikesCount} memes liked
               </span>
@@ -1024,10 +1024,10 @@ export default function AdminPage() {
           </div>
 
           {/* 4 Large Overview Panels - Fill All Available Vertical Space */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-2 lg:grid-flow-col gap-3 flex-1 min-h-0">
+          <div className="grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-2 lg:grid-flow-col gap-2 flex-1 min-h-0">
             {/* Panel 1: Content Creation Velocity */}
-            <div className="rounded-xl border border-gray-200 bg-white p-3.5 shadow-2xs flex flex-col min-h-0 h-full">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-2 shrink-0">
+            <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-2xs flex flex-col min-h-0 h-full">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-1.5 shrink-0">
                 <h3 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
                   <span>📈</span>
                   <span>Content Creation Velocity (7 Days)</span>
@@ -1052,7 +1052,7 @@ export default function AdminPage() {
                   const imageHeight = Math.round((day.imagesCount / overviewStats.maxDayCount) * 100);
 
                   return (
-                    <div key={day.dateStr} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end min-h-0">
+                    <div key={day.dateStr} className="flex-1 flex flex-col items-center gap-1 h-full justify-end min-h-0">
                       <div className="w-full flex items-end justify-center gap-1 flex-1 min-h-0">
                         <div
                           style={{ height: `${imageHeight}%` }}
@@ -1073,8 +1073,8 @@ export default function AdminPage() {
             </div>
 
             {/* Panel 2: Platform Conversion Funnel */}
-            <div className="rounded-xl border border-gray-200 bg-white p-3.5 shadow-2xs flex flex-col justify-between min-h-0 h-full">
-              <div className="border-b border-gray-100 pb-2 shrink-0">
+            <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-2xs flex flex-col justify-between min-h-0 h-full">
+              <div className="border-b border-gray-100 pb-1.5 shrink-0">
                 <h3 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
                   <span>🎯</span>
                   <span>Platform Conversion Funnel</span>
@@ -1087,7 +1087,7 @@ export default function AdminPage() {
                     <span className="font-semibold text-gray-700">1. Uploaded Images</span>
                     <span className="font-bold text-gray-900">{images.length} (100%)</span>
                   </div>
-                  <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div className="h-full bg-sky-500 rounded-full" style={{ width: '100%' }} />
                   </div>
                 </div>
@@ -1099,7 +1099,7 @@ export default function AdminPage() {
                       {overviewStats.imagesWithMemesCount} ({overviewStats.imageToMemeConversion}%)
                     </span>
                   </div>
-                  <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-purple-600 rounded-full"
                       style={{ width: `${overviewStats.imageToMemeConversion}%` }}
@@ -1114,7 +1114,7 @@ export default function AdminPage() {
                       {overviewStats.memesWithLikesCount} ({overviewStats.memeEngagementRate}%)
                     </span>
                   </div>
-                  <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-rose-500 rounded-full"
                       style={{ width: `${overviewStats.memeEngagementRate}%` }}
@@ -1125,8 +1125,8 @@ export default function AdminPage() {
             </div>
 
             {/* Panel 3: Top Memes Leaderboard */}
-            <div className="rounded-xl border border-gray-200 bg-white p-3.5 shadow-2xs flex flex-col justify-between min-h-0 h-full">
-              <div className="border-b border-gray-100 pb-2 flex items-center justify-between shrink-0">
+            <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-2xs flex flex-col justify-between min-h-0 h-full">
+              <div className="border-b border-gray-100 pb-1.5 flex items-center justify-between shrink-0">
                 <h3 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
                   <span>🏆</span>
                   <span>Top Community Memes</span>
@@ -1145,7 +1145,7 @@ export default function AdminPage() {
                   No memes created yet.
                 </div>
               ) : (
-                <div className="flex-1 min-h-0 flex flex-col justify-around py-1 space-y-1.5">
+                <div className="flex-1 min-h-0 flex flex-col justify-around py-0.5 space-y-1">
                   {overviewStats.topMemes.map((m, index) => {
                     const rankBadges = [
                       'bg-amber-100 text-amber-800 border-amber-300',
@@ -1156,10 +1156,10 @@ export default function AdminPage() {
                     return (
                       <div
                         key={m.id}
-                        className="p-2 rounded-lg border border-gray-200 bg-gray-50/70 hover:bg-white transition flex items-center justify-between gap-2.5 text-xs flex-1 max-h-[56px]"
+                        className="p-1.5 rounded-lg border border-gray-200 bg-gray-50/70 hover:bg-white transition flex items-center justify-between gap-2 text-xs flex-1 max-h-[46px]"
                       >
                         <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <span className={`w-5 h-5 rounded-full flex items-center justify-center font-bold border text-[10px] shrink-0 ${rankBadges[index]}`}>
+                          <span className={`w-4 h-4 rounded-full flex items-center justify-center font-bold border text-[9px] shrink-0 ${rankBadges[index]}`}>
                             #{index + 1}
                           </span>
 
@@ -1168,10 +1168,10 @@ export default function AdminPage() {
                             <img
                               src={m.displayUrl}
                               alt="Meme thumbnail"
-                              className="w-8 h-8 object-cover rounded border border-gray-200 shrink-0 bg-gray-100"
+                              className="w-7 h-7 object-cover rounded border border-gray-200 shrink-0 bg-gray-100"
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded border border-gray-200 bg-gray-200 flex items-center justify-center text-[10px] shrink-0">
+                            <div className="w-7 h-7 rounded border border-gray-200 bg-gray-200 flex items-center justify-center text-[10px] shrink-0">
                               🎭
                             </div>
                           )}
@@ -1193,8 +1193,8 @@ export default function AdminPage() {
             </div>
 
             {/* Panel 4: System Infrastructure Status */}
-            <div className="rounded-xl border border-gray-200 bg-white p-3.5 shadow-2xs flex flex-col justify-between min-h-0 h-full">
-              <div className="border-b border-gray-100 pb-2 flex items-center justify-between shrink-0">
+            <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-2xs flex flex-col justify-between min-h-0 h-full">
+              <div className="border-b border-gray-100 pb-1.5 flex items-center justify-between shrink-0">
                 <h3 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
                   <span>⚙️</span>
                   <span>System Infrastructure</span>
@@ -1205,31 +1205,31 @@ export default function AdminPage() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-xs flex-1 py-1">
-                <div className="p-2 rounded-lg bg-gray-50 border border-gray-100 flex justify-between items-center">
+              <div className="grid grid-cols-2 gap-1.5 text-xs flex-1 py-1">
+                <div className="p-1.5 rounded-lg bg-gray-50 border border-gray-100 flex justify-between items-center">
                   <span className="text-[11px] text-gray-600">Users</span>
                   <span className="font-bold text-gray-900 text-xs">{profiles.length}</span>
                 </div>
 
-                <div className="p-2 rounded-lg bg-gray-50 border border-gray-100 flex justify-between items-center">
+                <div className="p-1.5 rounded-lg bg-gray-50 border border-gray-100 flex justify-between items-center">
                   <span className="text-[11px] text-gray-600">Images</span>
                   <span className="font-bold text-gray-900 text-xs">{images.length}</span>
                 </div>
 
-                <div className="p-2 rounded-lg bg-gray-50 border border-gray-100 flex justify-between items-center">
+                <div className="p-1.5 rounded-lg bg-gray-50 border border-gray-100 flex justify-between items-center">
                   <span className="text-[11px] text-gray-600">Memes</span>
                   <span className="font-bold text-gray-900 text-xs">{memes.length}</span>
                 </div>
 
-                <div className="p-2 rounded-lg bg-amber-50/70 border border-amber-200/60 flex justify-between items-center">
+                <div className="p-1.5 rounded-lg bg-amber-50/70 border border-amber-200/60 flex justify-between items-center">
                   <span className="text-[11px] text-amber-800 font-medium">AI Pipeline</span>
                   <span className="font-bold text-amber-900 text-[10px]">Rework V2</span>
                 </div>
               </div>
 
-              <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-2 text-[11px] text-blue-900 flex items-center gap-2 shrink-0">
+              <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-1.5 text-[10px] text-blue-900 flex items-center gap-2 shrink-0">
                 <span>🛡️</span>
-                <span className="text-blue-800">Super Admin privileges active across all profiles, image storage, and memes.</span>
+                <span className="text-blue-800">Super Admin privileges active across all profiles, storage, and memes.</span>
               </div>
             </div>
           </div>
