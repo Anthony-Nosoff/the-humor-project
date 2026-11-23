@@ -677,7 +677,7 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 space-y-2.5">
+    <div className={`max-w-[1440px] mx-auto px-4 sm:px-6 flex flex-col ${activeTab === 'overview' ? 'lg:h-[calc(100dvh-109px)] lg:overflow-hidden' : 'space-y-2.5'}`}>
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-24 right-6 z-50 rounded-lg bg-gray-900 text-white px-4 py-2.5 text-xs shadow-xl flex items-center gap-2 animate-bounce">
@@ -687,7 +687,7 @@ export default function AdminPage() {
       )}
 
       {/* Admin Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-gray-200 pb-2">
+      <div className="shrink-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-gray-200 pb-2">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-xl">🛡️</span>
@@ -729,7 +729,7 @@ export default function AdminPage() {
       </div>
 
       {/* Admin Layout with Left Pinned Collapsible Navigation (Desktop) & Separate Drawer (Mobile) */}
-      <div className="flex flex-col lg:flex-row gap-3 items-start relative">
+      <div className={`flex flex-col lg:flex-row gap-3 relative ${activeTab === 'overview' ? 'flex-1 min-h-0 pt-2.5' : 'items-start'}`}>
         {/* Mobile Backdrop (separate overlay, does not push content) */}
         {isMobileNavOpen && (
           <div
@@ -743,9 +743,10 @@ export default function AdminPage() {
         <aside
           className={`
             fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] h-full bg-white p-3.5 shadow-2xl overflow-y-auto transition-transform duration-300 ease-in-out
-            lg:static lg:z-auto lg:translate-x-0 lg:p-0 lg:bg-transparent lg:shadow-none lg:overflow-visible lg:h-auto lg:shrink-0 lg:sticky lg:top-3 lg:self-start lg:max-h-[calc(100dvh-11rem)] lg:overflow-y-auto lg:transition-[width] lg:duration-200
+            lg:static lg:z-auto lg:translate-x-0 lg:p-0 lg:bg-transparent lg:shadow-none lg:overflow-visible lg:shrink-0 lg:sticky lg:top-3 lg:self-start lg:transition-[width] lg:duration-200
             ${isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'}
             ${isSidebarCollapsed ? 'lg:w-16' : 'lg:w-64 xl:w-72'}
+            ${activeTab === 'overview' ? 'lg:h-full lg:max-h-full lg:overflow-y-auto' : 'lg:h-auto'}
           `}
         >
           <div className="bg-white rounded-xl border border-gray-200 p-2.5 shadow-2xs space-y-3">
@@ -957,13 +958,13 @@ export default function AdminPage() {
         </button>
 
         {/* Right Content Area */}
-        <main className="flex-1 min-w-0 w-full space-y-4">
+        <div className={`flex-1 min-w-0 w-full flex flex-col ${activeTab === 'overview' ? 'h-full min-h-0' : 'space-y-4'}`}>
 
       {/* ========================================================= */}
       {/* TAB 1: OVERVIEW & ANALYTICS */}
       {/* ========================================================= */}
       {activeTab === 'overview' && (
-        <div className="lg:h-[calc(100dvh-11rem)] lg:max-h-[calc(100dvh-11rem)] flex flex-col gap-2 min-h-0">
+        <div className="h-full flex flex-col gap-2.5 min-h-0">
           {/* Top KPI Metrics Strip - 4 Core Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
             <button
@@ -1609,7 +1610,7 @@ export default function AdminPage() {
           ]}
         />
       )}
-        </main>
+        </div>
       </div>
 
       {/* ========================================================= */}
