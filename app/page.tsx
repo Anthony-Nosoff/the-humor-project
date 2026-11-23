@@ -302,6 +302,68 @@ export default function ExplorePage() {
     }
   };
 
+  const handleShareMeme = useCallback(async (meme: EnrichedMeme) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const shareUrl = `${origin}/?meme=${meme.id}`;
+    const shareData = {
+      title: meme.caption || 'JokeWorks Meme',
+      text: meme.caption ? `"${meme.caption}" - JokeWorks` : 'Check out this meme on JokeWorks!',
+      url: shareUrl,
+    };
+
+    if (
+      typeof navigator !== 'undefined' &&
+      navigator.share &&
+      navigator.canShare &&
+      navigator.canShare(shareData)
+    ) {
+      try {
+        await navigator.share(shareData);
+        setToastMessage('Shared successfully! 🚀');
+        setTimeout(() => setToastMessage(null), 3000);
+        return;
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
+      }
+    }
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl);
+        setToastMessage('Meme link copied to clipboard! 📋');
+        setTimeout(() => setToastMessage(null), 3000);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = shareUrl;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        setToastMessage('Meme link copied to clipboard! 📋');
+        setTimeout(() => setToastMessage(null), 3000);
+      }
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+      setToastMessage('Could not copy link to clipboard');
+      setTimeout(() => setToastMessage(null), 3000);
+    }
+  }, []);
+
+  // Check URL query for ?meme=id to auto-open details modal
+  useEffect(() => {
+    if (typeof window === 'undefined' || memes.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const memeId = params.get('meme');
+    if (memeId) {
+      const targetMeme = memes.find((m) => m.id === memeId);
+      if (targetMeme) {
+        setSelectedMeme(targetMeme);
+      }
+    }
+  }, [memes]);
+
   const myMemesCount = session?.user
     ? memes.filter((m) => m.image?.uploader_id === session.user.id).length
     : 0;
@@ -534,6 +596,33 @@ export default function ExplorePage() {
                         {meme.likesCount === 1 ? 'like' : 'likes'}
                       </span>
                     </button>
+
+                    {/* Share Button (icon only) */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleShareMeme(meme);
+                      }}
+                      className="inline-flex items-center justify-center rounded-full p-1.5 text-gray-500 bg-gray-100 hover:bg-purple-50 hover:text-purple-600 transition cursor-pointer"
+                      title="Share this meme"
+                      aria-label="Share this meme"
+                    >
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z"
+                        />
+                      </svg>
+                    </button>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -619,6 +708,30 @@ export default function ExplorePage() {
                   <span className="font-normal text-[11px]">
                     {activeSelectedMeme.likesCount === 1 ? 'like' : 'likes'}
                   </span>
+                </button>
+
+                {/* Share Button (icon only) */}
+                <button
+                  type="button"
+                  onClick={() => handleShareMeme(activeSelectedMeme)}
+                  className="inline-flex items-center justify-center rounded-full p-1.5 text-gray-500 bg-gray-100 hover:bg-purple-50 hover:text-purple-600 transition cursor-pointer"
+                  title="Share this meme"
+                  aria-label="Share this meme"
+                >
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z"
+                    />
+                  </svg>
                 </button>
 
                 {/* Delete Button for Owners */}
