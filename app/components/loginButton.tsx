@@ -32,7 +32,7 @@ export default function LoginButton({ className }: LoginButtonProps) {
       onClick={runAuth}
       className={
         className ||
-        "rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-blue-700 transition cursor-pointer"
+        "inline-flex h-9 items-center rounded-lg bg-blue-600 px-4 text-sm font-medium text-white shadow-xs hover:bg-blue-700 transition cursor-pointer"
       }
     >
       Log In with LionMail + Google

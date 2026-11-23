@@ -45,17 +45,17 @@ export default function UserProfileButton({ session, profile }: UserProfileButto
         href="/profile"
         id="user-name"
         data-testid="user-name"
-        className="flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-800 hover:border-gray-300 hover:bg-gray-100 transition shadow-xs"
+        className="flex h-9 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3.5 text-sm font-medium text-gray-800 hover:border-gray-400 hover:bg-gray-50 active:scale-95 transition-all duration-200 shadow-xs"
         title="View Profile"
       >
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-600 text-xs font-semibold text-white">
           {initials}
         </span>
         <span className="max-w-[140px] truncate sm:max-w-none">{displayName}</span>
       </Link>
       <button
         onClick={handleSignOut}
-        className="rounded px-2 py-1 text-xs font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition cursor-pointer"
+        className="flex h-9 items-center rounded-lg px-2.5 text-sm font-medium text-gray-500 hover:bg-red-50 hover:text-red-600 active:scale-95 transition-all duration-200 cursor-pointer"
       >
         Sign Out
       </button>

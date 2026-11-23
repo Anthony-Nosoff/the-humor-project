@@ -1,4 +1,4 @@
-# The Humor Project
+# JokeWorks
 
 A modern web application built with [Next.js](https://nextjs.org/) (App Router), [React](https://react.dev/), [Tailwind CSS](https://tailwindcss.com/), and [Supabase](https://supabase.com/) for PostgreSQL database storage and Google OAuth authentication.
 
