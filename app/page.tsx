@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { supabase } from '@/app/supabase/supabaseClient';
 import type { Session } from '@supabase/supabase-js';
 import type { Database } from '@/app/supabase/types';
+import MarkdownRenderer from '@/app/components/markdownRenderer';
+import { useUploadModal } from '@/app/context/UploadModalContext';
 
 type MemeRow = Database['public']['Tables']['memes']['Row'];
 type ImageRow = Database['public']['Tables']['images']['Row'];
@@ -17,7 +19,8 @@ interface EnrichedMeme extends MemeRow {
   userLiked: boolean;
 }
 
-export default function HomePage() {
+export default function ExplorePage() {
+  const { openUploadModal } = useUploadModal();
   const [session, setSession] = useState<Session | null>(null);
   const [memes, setMemes] = useState<EnrichedMeme[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +30,7 @@ export default function HomePage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [memeToDelete, setMemeToDelete] = useState<EnrichedMeme | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedMeme, setSelectedMeme] = useState<EnrichedMeme | null>(null);
 
   const fetchMemes = useCallback(async (currentUserId?: string) => {
     setLoading(true);
@@ -318,11 +322,15 @@ export default function HomePage() {
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
+  const activeSelectedMeme = selectedMeme
+    ? memes.find((m) => m.id === selectedMeme.id) || selectedMeme
+    : null;
+
   return (
     <div className="max-w-6xl mx-auto py-8 px-4">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-gray-900 text-white px-4 py-2.5 text-xs shadow-lg flex items-center gap-2 animate-fade-in">
+        <div className="fixed bottom-24 right-6 z-50 rounded-lg bg-gray-900 text-white px-4 py-2.5 text-xs shadow-lg flex items-center gap-2 animate-fade-in">
           <span>{toastMessage}</span>
         </div>
       )}
@@ -330,9 +338,9 @@ export default function HomePage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Community Memes</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Explore Memes</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Browse and rate humorous memes created by all users!
+            Browse, rate, and discover humorous memes created by the community.
           </p>
         </div>
 
@@ -391,12 +399,13 @@ export default function HomePage() {
             </button>
           </div>
 
-          <Link
-            href="/upload"
-            className="inline-flex items-center justify-center rounded-md bg-purple-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-purple-700 transition"
+          <button
+            type="button"
+            onClick={openUploadModal}
+            className="inline-flex items-center justify-center rounded-md bg-purple-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-purple-700 transition cursor-pointer"
           >
             + Make a Meme
-          </Link>
+          </button>
         </div>
       </div>
 
@@ -435,12 +444,13 @@ export default function HomePage() {
                 View All Memes
               </button>
             )}
-            <Link
-              href="/upload"
-              className="inline-flex items-center rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-purple-700 transition"
+            <button
+              type="button"
+              onClick={openUploadModal}
+              className="inline-flex items-center rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-purple-700 transition cursor-pointer"
             >
               Upload & Make Meme
-            </Link>
+            </button>
             <Link
               href="/my-images"
               className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
@@ -462,7 +472,10 @@ export default function HomePage() {
                 className="group flex flex-col rounded-xl border border-gray-200 bg-white shadow-2xs hover:shadow-md transition overflow-hidden"
               >
                 {/* Meme Image Container */}
-                <div className="relative aspect-square w-full bg-gray-900 overflow-hidden flex items-center justify-center">
+                <div
+                  onClick={() => setSelectedMeme(meme)}
+                  className="relative aspect-square w-full bg-gray-900 overflow-hidden flex items-center justify-center cursor-pointer"
+                >
                   {/* "Your Meme" Badge */}
                   {isOwner && (
                     <div className="absolute top-2.5 left-2.5 z-10 rounded-full bg-purple-600/90 text-white px-2.5 py-0.5 text-[10px] font-bold tracking-wide backdrop-blur-xs shadow-xs">
@@ -492,22 +505,9 @@ export default function HomePage() {
                   )}
                 </div>
 
-                {/* Meme Card Body & Rating Controls */}
-                <div className="p-4 flex flex-col justify-between flex-1 gap-3">
-                  {/* Caption Title */}
-                  <div>
-                    <p className="font-semibold text-gray-900 text-base leading-snug line-clamp-2">
-                      &ldquo;{meme.caption}&rdquo;
-                    </p>
-                    {meme.image?.description && (
-                      <p className="text-xs text-gray-400 line-clamp-1 mt-1">
-                        Context: {meme.image.description}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Rating Button & Actions */}
-                  <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                {/* Meme Card Action Controls */}
+                <div className="p-3.5 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
                     {/* Rating / Like Button */}
                     <button
                       type="button"
@@ -534,47 +534,185 @@ export default function HomePage() {
                         {meme.likesCount === 1 ? 'like' : 'likes'}
                       </span>
                     </button>
+                  </div>
 
-                    <div className="flex items-center gap-2.5">
-                      {/* Delete Button for Owners */}
-                      {isOwner && (
-                        <button
-                          type="button"
-                          onClick={() => setMemeToDelete(meme)}
-                          disabled={deletingId === meme.id}
-                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 border border-transparent hover:border-red-200 transition cursor-pointer"
-                          title="Delete your meme"
+                  <div className="flex items-center gap-2">
+                    {/* Date */}
+                    <span className="text-[11px] text-gray-400">
+                      {new Date(meme.created_at).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </span>
+
+                    {/* Delete Button for Owners (formatted same as My Images) */}
+                    {isOwner && (
+                      <button
+                        type="button"
+                        onClick={() => setMemeToDelete(meme)}
+                        disabled={deletingId === meme.id}
+                        className="rounded-lg p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition cursor-pointer"
+                        title="Delete your meme"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
                         >
-                          <svg
-                            className="w-3.5 h-3.5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                          </svg>
-                          <span>Delete</span>
-                        </button>
-                      )}
-
-                      {/* Date */}
-                      <span className="text-[11px] text-gray-400">
-                        {new Date(meme.created_at).toLocaleDateString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </span>
-                    </div>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Details Window Modal (similar to My Images details window) */}
+      {activeSelectedMeme && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs"
+          onClick={() => setSelectedMeme(null)}
+        >
+          <div
+            className="relative max-w-2xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3.5">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🎭</span>
+                <h3 className="text-sm font-bold text-gray-900">Meme Details</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Like Button */}
+                <button
+                  type="button"
+                  onClick={() => handleToggleLike(activeSelectedMeme)}
+                  disabled={ratingInProgress[activeSelectedMeme.id]}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                    activeSelectedMeme.userLiked
+                      ? 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                  }`}
+                  title={
+                    !session?.user
+                      ? 'Sign in to like this meme'
+                      : activeSelectedMeme.userLiked
+                      ? 'Click to unlike'
+                      : 'Click to like'
+                  }
+                >
+                  <span className={activeSelectedMeme.userLiked ? 'text-rose-500 scale-110' : 'text-gray-400'}>
+                    {activeSelectedMeme.userLiked ? '❤️' : '🤍'}
+                  </span>
+                  <span>{activeSelectedMeme.likesCount}</span>
+                  <span className="font-normal text-[11px]">
+                    {activeSelectedMeme.likesCount === 1 ? 'like' : 'likes'}
+                  </span>
+                </button>
+
+                {/* Delete Button for Owners */}
+                {session?.user?.id && activeSelectedMeme.image?.uploader_id === session.user.id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMemeToDelete(activeSelectedMeme);
+                      setSelectedMeme(null);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition cursor-pointer"
+                    title="Delete meme"
+                  >
+                    <span>Delete</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedMeme(null)}
+                  className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="overflow-y-auto p-5 space-y-4">
+              {/* Image Preview with Caption */}
+              <div className="flex justify-center bg-gray-950 rounded-xl overflow-hidden max-h-[50vh] relative">
+                {activeSelectedMeme.displayUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={activeSelectedMeme.displayUrl}
+                    alt={activeSelectedMeme.caption || 'Meme image'}
+                    className="max-h-[50vh] max-w-full object-contain p-2"
+                  />
+                ) : (
+                  <div className="text-gray-400 text-xs p-12">Image unavailable</div>
+                )}
+                {activeSelectedMeme.caption && (
+                  <div className="absolute inset-x-0 bottom-4 px-4 text-center pointer-events-none">
+                    <span className="inline-block bg-black/80 text-white font-black text-sm sm:text-base px-3 py-1.5 rounded uppercase tracking-wide leading-tight shadow-lg backdrop-blur-2xs">
+                      {activeSelectedMeme.caption}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Caption Section */}
+              <div className="rounded-xl bg-purple-50/60 border border-purple-200 p-4 space-y-1">
+                <span className="text-[10px] font-bold text-purple-900 uppercase tracking-wider block">
+                  Meme Caption
+                </span>
+                <p className="text-base font-bold text-gray-900 leading-snug">
+                  &ldquo;{activeSelectedMeme.caption}&rdquo;
+                </p>
+              </div>
+
+              {/* Context / Gemini Summary Section */}
+              {activeSelectedMeme.image?.description ? (
+                <div className="rounded-xl bg-gray-50 border border-gray-200 p-4 space-y-1.5">
+                  <span className="text-[10px] font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1">
+                    <span>✨</span>
+                    <span>Image Context & Gemini Summary</span>
+                  </span>
+                  <MarkdownRenderer
+                    content={activeSelectedMeme.image.description}
+                    className="text-gray-700 text-xs leading-relaxed"
+                  />
+                </div>
+              ) : (
+                <div className="rounded-xl bg-gray-50 border border-gray-200 p-4 text-xs text-gray-400 italic">
+                  No visual context or summary available for this image.
+                </div>
+              )}
+
+              {/* Metadata Footer */}
+              <div className="flex items-center justify-between text-[11px] text-gray-400 pt-1 border-t border-gray-100">
+                <span>
+                  Created on {new Date(activeSelectedMeme.created_at).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </span>
+                <span className="flex items-center gap-1 text-rose-600 font-semibold">
+                  <span>❤️</span>
+                  <span>{activeSelectedMeme.likesCount} {activeSelectedMeme.likesCount === 1 ? 'like' : 'likes'}</span>
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
