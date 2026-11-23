@@ -251,10 +251,10 @@ export default function UploadImage() {
           </div>
           <div className="flex items-center gap-3">
             <Link
-              href="/memes"
+              href="/"
               className="font-semibold text-purple-700 hover:text-purple-900 underline"
             >
-              View All Memes &rarr;
+              Explore All Memes &rarr;
             </Link>
           </div>
         </div>
