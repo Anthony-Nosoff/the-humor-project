@@ -304,23 +304,6 @@ export default function ProfilePage() {
             <span>Profile & Account</span>
           </h1>
         </div>
-
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={openUploadModal}
-            className="rounded-lg bg-purple-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-purple-700 transition flex items-center gap-1.5 cursor-pointer"
-          >
-            <span>+</span>
-            <span>Make a Meme</span>
-          </button>
-          <Link
-            href="/"
-            className="rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition shadow-2xs"
-          >
-            Explore Memes &rarr;
-          </Link>
-        </div>
       </div>
 
       {/* User Hero Identity Card */}
